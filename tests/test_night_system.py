@@ -15,7 +15,17 @@ from constants import (
     TERRAIN_GRASS,
     TERRAIN_WATER,
 )
-from night_system import NightSystem, hex_distance
+from enemy import create_enemy
+from night_system import (
+    NightSystem,
+    hex_distance,
+    move_enemy_toward_camp,
+)
+from night_system import (
+    NightSystem,
+    hex_distance,
+    move_enemy_toward_camp,
+)
 
 
 @dataclass
@@ -334,3 +344,187 @@ def test_no_spawn_candidates_raises_value_error():
             hex_map,
             EVENT_NONE,
         )
+
+def test_wolf_moves_two_steps_toward_camp():
+    hex_map = FakeHexMap()
+    wolf = create_enemy(
+        ENEMY_WOLF,
+        (5, 1),
+    )
+
+    start_distance = hex_distance(
+        wolf.position,
+        (5, 4),
+    )
+
+    steps = move_enemy_toward_camp(
+        wolf,
+        hex_map,
+        campfire_lit=False,
+    )
+
+    end_distance = hex_distance(
+        wolf.position,
+        (5, 4),
+    )
+
+    assert steps == 2
+    assert end_distance == start_distance - 2
+
+
+def test_boar_moves_one_step_toward_camp():
+    hex_map = FakeHexMap()
+    boar = create_enemy(
+        ENEMY_BOAR,
+        (5, 2),
+    )
+
+    start_distance = hex_distance(
+        boar.position,
+        (5, 4),
+    )
+
+    steps = move_enemy_toward_camp(
+        boar,
+        hex_map,
+        campfire_lit=False,
+    )
+
+    end_distance = hex_distance(
+        boar.position,
+        (5, 4),
+    )
+
+    assert steps == 1
+    assert end_distance == start_distance - 1
+
+
+def test_enemy_does_not_move_through_water():
+    hex_map = FakeHexMap()
+
+    # From (5, 1), (5, 2) is the only neighboring tile
+    # that gets closer to CAMP_POSITION.
+    hex_map.tiles[(5, 2)].terrain = TERRAIN_WATER
+
+    wolf = create_enemy(
+        ENEMY_WOLF,
+        (5, 1),
+    )
+
+    steps = move_enemy_toward_camp(
+        wolf,
+        hex_map,
+        campfire_lit=False,
+    )
+
+    assert steps == 0
+    assert wolf.position == (5, 1)
+
+
+def test_wolf_stops_outside_fire_zone():
+    hex_map = FakeHexMap()
+
+    wolf = create_enemy(
+        ENEMY_WOLF,
+        (5, 2),
+    )
+
+    assert hex_distance(
+        wolf.position,
+        (5, 4),
+    ) == 2
+
+    steps = move_enemy_toward_camp(
+        wolf,
+        hex_map,
+        campfire_lit=True,
+    )
+
+    assert steps == 0
+    assert wolf.position == (5, 2)
+
+
+def test_wolf_can_enter_fire_zone_when_fire_is_out():
+    hex_map = FakeHexMap()
+
+    wolf = create_enemy(
+        ENEMY_WOLF,
+        (5, 2),
+    )
+
+    steps = move_enemy_toward_camp(
+        wolf,
+        hex_map,
+        campfire_lit=False,
+    )
+
+    assert steps >= 1
+    assert hex_distance(
+        wolf.position,
+        (5, 4),
+    ) <= 1
+
+
+def test_boar_ignores_fire_zone():
+    hex_map = FakeHexMap()
+
+    boar = create_enemy(
+        ENEMY_BOAR,
+        (5, 2),
+    )
+
+    steps = move_enemy_toward_camp(
+        boar,
+        hex_map,
+        campfire_lit=True,
+    )
+
+    assert steps == 1
+    assert hex_distance(
+        boar.position,
+        (5, 4),
+    ) == 1
+
+
+def test_wolf_already_in_fire_zone_does_not_move_closer():
+    hex_map = FakeHexMap()
+
+    wolf = create_enemy(
+        ENEMY_WOLF,
+        (5, 3),
+    )
+
+    assert hex_distance(
+        wolf.position,
+        (5, 4),
+    ) == 1
+
+    steps = move_enemy_toward_camp(
+        wolf,
+        hex_map,
+        campfire_lit=True,
+    )
+
+    assert steps == 0
+    assert wolf.position == (5, 3)
+
+
+def test_dead_enemy_does_not_move():
+    hex_map = FakeHexMap()
+
+    wolf = create_enemy(
+        ENEMY_WOLF,
+        (5, 1),
+    )
+
+    wolf.health = 0
+    wolf.alive = False
+
+    steps = move_enemy_toward_camp(
+        wolf,
+        hex_map,
+        campfire_lit=False,
+    )
+
+    assert steps == 0
+    assert wolf.position == (5, 1)

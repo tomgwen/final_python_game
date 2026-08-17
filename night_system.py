@@ -19,6 +19,16 @@ from constants import (
 from enemy import Enemy, create_enemy
 
 
+HEX_DIRECTIONS = (
+    (1, 0),
+    (1, -1),
+    (0, -1),
+    (-1, 0),
+    (-1, 1),
+    (0, 1),
+)
+
+
 def hex_distance(
     a: tuple[int, int],
     b: tuple[int, int],
@@ -33,6 +43,117 @@ def hex_distance(
         + abs(q1 + r1 - q2 - r2)
         + abs(r1 - r2)
     ) // 2
+
+
+def get_next_enemy_position(
+    enemy: Enemy,
+    hex_map,
+    campfire_lit: bool,
+) -> tuple[int, int]:
+    """Return one legal step toward the camp.
+
+    The function does not move the enemy itself.
+
+    Wolves refuse to enter the campfire protection zone while the
+    campfire is lit. Boars ignore the fire.
+    """
+
+    if not enemy.alive:
+        return enemy.position
+
+    current_distance = hex_distance(
+        enemy.position,
+        CAMP_POSITION,
+    )
+
+    if current_distance == 0:
+        return enemy.position
+
+    q, r = enemy.position
+    candidates: list[tuple[int, int]] = []
+
+    for dq, dr in HEX_DIRECTIONS:
+        candidate = (q + dq, r + dr)
+
+        tile = hex_map.get_tile(
+            candidate[0],
+            candidate[1],
+        )
+
+        if tile is None:
+            continue
+
+        if tile.terrain == TERRAIN_WATER:
+            continue
+
+        candidate_distance = hex_distance(
+            candidate,
+            CAMP_POSITION,
+        )
+
+        # Only move closer to the camp.
+        if candidate_distance >= current_distance:
+            continue
+
+        # Wolves avoid the camp and its six surrounding hexes
+        # while the campfire is burning.
+        if (
+            enemy.fear_of_fire
+            and campfire_lit
+            and candidate_distance <= 1
+        ):
+            continue
+
+        candidates.append(candidate)
+
+    if not candidates:
+        return enemy.position
+
+    # Deterministic ordering makes tests reproducible.
+    candidates.sort(
+        key=lambda position: (
+            hex_distance(position, CAMP_POSITION),
+            position[0],
+            position[1],
+        )
+    )
+
+    return candidates[0]
+
+
+def move_enemy_toward_camp(
+    enemy: Enemy,
+    hex_map,
+    campfire_lit: bool,
+) -> int:
+    """Move an enemy toward camp and return the number of steps taken.
+
+    Wolves may move up to two hexes each enemy round.
+    Boars may move one hex.
+    """
+
+    if not enemy.alive:
+        return 0
+
+    steps_taken = 0
+
+    for _ in range(enemy.move_range):
+        next_position = get_next_enemy_position(
+            enemy,
+            hex_map,
+            campfire_lit,
+        )
+
+        if next_position == enemy.position:
+            break
+
+        enemy.position = next_position
+        steps_taken += 1
+
+        if enemy.position == CAMP_POSITION:
+            break
+
+    return steps_taken
 
 
 class NightSystem:
@@ -142,7 +263,9 @@ class NightSystem:
         positions = list(shuffled)
 
         while len(positions) < count:
-            positions.append(self.rng.choice(candidates))
+            positions.append(
+                self.rng.choice(candidates)
+            )
 
         return positions
 
@@ -152,7 +275,7 @@ class NightSystem:
         hex_map,
         event_type: str,
     ) -> None:
-        """Start a night and spawn the correct enemies on map-edge tiles."""
+        """Start a night and spawn enemies on map-edge tiles."""
 
         wolf_count, boar_count = self.get_enemy_counts(
             day,
