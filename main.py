@@ -32,6 +32,7 @@ from constants import (
 from enemy import calculate_player_damage, claim_loot, create_enemy, damage_enemy
 from inventory import Inventory
 from pathfinding import find_hex_path
+from recipe_catalog import RECIPE_CATALOG
 from survival import SurvivalStats
 
 
@@ -1487,6 +1488,165 @@ def execute_hud_action(game: Game, action: str) -> None:
         game.reset()
 
 
+
+def recipe_button_rect() -> pygame.Rect:
+    """HUD button used to open/close the recipe catalog."""
+    return pygame.Rect(855, 646, 355, 34)
+
+
+def recipe_modal_rect() -> pygame.Rect:
+    """Main recipe modal bounds."""
+    return pygame.Rect(310, 82, 660, 556)
+
+
+def recipe_close_rect() -> pygame.Rect:
+    """Close button in the top-right corner of the recipe modal."""
+    modal = recipe_modal_rect()
+    return pygame.Rect(modal.right - 48, modal.y + 14, 32, 32)
+
+
+def draw_recipe_modal(surface, fonts) -> None:
+    """Draw the recipe catalog as a modal overlay.
+
+    This is intentionally a functional/basic UI. The art branch can
+    later replace only the rendering while keeping RECIPE_CATALOG as
+    the shared data source.
+    """
+    shade = pygame.Surface(
+        (SCREEN_WIDTH, SCREEN_HEIGHT),
+        pygame.SRCALPHA,
+    )
+    shade.fill((0, 0, 0, 150))
+    surface.blit(shade, (0, 0))
+
+    modal = recipe_modal_rect()
+
+    pygame.draw.rect(
+        surface,
+        (25, 28, 31),
+        modal,
+        border_radius=16,
+    )
+    pygame.draw.rect(
+        surface,
+        GOLD,
+        modal,
+        2,
+        border_radius=16,
+    )
+
+    text(
+        surface,
+        fonts["heading"],
+        "合成清單",
+        modal.x + 28,
+        modal.y + 22,
+        GOLD_LIGHT,
+    )
+    text(
+        surface,
+        fonts["tiny"],
+        "查看配方不會消耗任何回合｜ESC 或右上角 X 關閉",
+        modal.x + 28,
+        modal.y + 55,
+        MUTED,
+    )
+
+    close = recipe_close_rect()
+    mouse = pygame.mouse.get_pos()
+    close_fill = (112, 58, 52) if close.collidepoint(mouse) else PANEL_2
+
+    pygame.draw.rect(
+        surface,
+        close_fill,
+        close,
+        border_radius=7,
+    )
+    pygame.draw.rect(
+        surface,
+        RED,
+        close,
+        1,
+        border_radius=7,
+    )
+    centered_text(
+        surface,
+        fonts["body"],
+        "X",
+        close.center,
+        TEXT,
+    )
+
+    y = modal.y + 92
+
+    for category in ("裝備", "建造"):
+        text(
+            surface,
+            fonts["body"],
+            category,
+            modal.x + 28,
+            y,
+            GOLD_LIGHT if category == "裝備" else BLUE,
+        )
+        y += 29
+
+        recipes = [
+            recipe
+            for recipe in RECIPE_CATALOG
+            if recipe["category"] == category
+        ]
+
+        for recipe in recipes:
+            row = pygame.Rect(
+                modal.x + 24,
+                y,
+                modal.width - 48,
+                64,
+            )
+
+            pygame.draw.rect(
+                surface,
+                PANEL_2,
+                row,
+                border_radius=9,
+            )
+            pygame.draw.rect(
+                surface,
+                (72, 76, 81),
+                row,
+                1,
+                border_radius=9,
+            )
+
+            text(
+                surface,
+                fonts["small"],
+                recipe["name"],
+                row.x + 14,
+                row.y + 8,
+                TEXT,
+            )
+            text(
+                surface,
+                fonts["tiny"],
+                f"成本：{recipe['cost_text']}",
+                row.x + 125,
+                row.y + 10,
+                GOLD_LIGHT,
+            )
+            text(
+                surface,
+                fonts["tiny"],
+                f"效果：{recipe['effect']}",
+                row.x + 14,
+                row.y + 36,
+                MUTED,
+            )
+
+            y += 70
+
+        y += 8
+
 def context_menu_rows(game, tile, origin):
     actions = game.context_actions(tile)
 
@@ -1582,12 +1742,12 @@ def draw_selected_tile_info(surface, fonts, game) -> None:
     text(surface, fonts["small"], detail, 1050, 454, TEXT)
 
 
-def draw_game(screen, fonts, game, context_tile, context_origin, drag_path=None) -> None:
+def draw_game(screen, fonts, game, context_tile, context_origin, drag_path=None, recipe_open=False) -> None:
     screen.fill(BG)
 
     pygame.draw.rect(screen, TOP, pygame.Rect(0, 0, SCREEN_WIDTH, 62))
 
-    text(screen, fonts["heading"], "石器時代：荒野求生 v4", 28, 18, GOLD_LIGHT)
+    text(screen, fonts["heading"], "石器時代：荒野求生 v5", 28, 18, GOLD_LIGHT)
     text(screen, fonts["small"], "拖曳角色＝快速移動｜右鍵＝操作選單", 345, 22, MUTED)
 
     if game.phase == "day":
@@ -1834,8 +1994,20 @@ def draw_game(screen, fonts, game, context_tile, context_origin, drag_path=None)
             accent=action in ("wait", "restart"),
         )
 
-    if context_tile is not None:
+    draw_button(
+        screen,
+        fonts,
+        recipe_button_rect(),
+        "關閉合成清單" if recipe_open else "合成清單",
+        True,
+        accent=recipe_open,
+    )
+
+    if context_tile is not None and not recipe_open:
         draw_context_menu(screen, fonts, game, context_tile, context_origin)
+
+    if recipe_open:
+        draw_recipe_modal(screen, fonts)
 
 
 TUTORIAL = [
@@ -1997,7 +2169,7 @@ def draw_tutorial(screen, fonts, page: int) -> None:
 
 def main() -> None:
     pygame.init()
-    pygame.display.set_caption("石器時代：荒野求生 v4 - 拖曳快速移動")
+    pygame.display.set_caption("石器時代：荒野求生 v5 - 合成清單")
 
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     clock = pygame.time.Clock()
@@ -2013,6 +2185,7 @@ def main() -> None:
 
     dragging_player = False
     drag_path = None
+    recipe_open = False
 
     running = True
 
@@ -2025,7 +2198,10 @@ def main() -> None:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     if view == "game":
-                        context_tile = None
+                        if recipe_open:
+                            recipe_open = False
+                        else:
+                            context_tile = None
                     else:
                         running = False
 
@@ -2033,6 +2209,9 @@ def main() -> None:
                     view = "tutorial"
                     tutorial_page = 0
                     context_tile = None
+                    recipe_open = False
+                    dragging_player = False
+                    drag_path = None
 
             # -------------------------------------------------
             # 玩家拖曳：移動中持續更新最短路徑預覽
@@ -2041,6 +2220,7 @@ def main() -> None:
                 view == "game"
                 and event.type == pygame.MOUSEMOTION
                 and dragging_player
+                and not recipe_open
             ):
                 tile = tile_at_pixel(event.pos)
 
@@ -2102,6 +2282,27 @@ def main() -> None:
                 continue
 
             if view != "game":
+                continue
+
+            # -------------------------------------------------
+            # 合成清單 Modal
+            # -------------------------------------------------
+            if event.button == 1 and recipe_button_rect().collidepoint(mouse):
+                recipe_open = not recipe_open
+                context_tile = None
+                dragging_player = False
+                drag_path = None
+                continue
+
+            if recipe_open:
+                if (
+                    event.button == 1
+                    and recipe_close_rect().collidepoint(mouse)
+                ):
+                    recipe_open = False
+
+                # Modal 開啟期間完全阻擋地圖、HUD、攻擊與建造點擊，
+                # 避免 UI click-through。
                 continue
 
             if event.button == 3:
@@ -2195,6 +2396,7 @@ def main() -> None:
                 context_tile,
                 context_origin,
                 drag_path,
+                recipe_open,
             )
 
         pygame.display.flip()
