@@ -456,7 +456,33 @@ class Game:
             return "food"
 
         return None
+    def resource_amount_at(
+        self,
+        tile: tuple[int, int],
+    ) -> int:
+        """Return the remaining gatherable resource amount on a tile."""
+        return max(
+            0,
+            self.resources.get(tile, 0),
+        )
 
+    def is_tile_depleted(
+        self,
+        tile: tuple[int, int],
+    ) -> bool:
+        """Return whether a resource-bearing tile has been depleted.
+
+        This value is intended for the visual system so collected and
+        uncollected terrain can use different artwork.
+        """
+        resource_type = self.resource_type_at(tile)
+
+        # Water and other non-resource terrain should not be treated
+        # as a depleted resource tile.
+        if resource_type is None:
+            return False
+
+        return self.resource_amount_at(tile) <= 0
     def can_gather_at(self, tile: tuple[int, int]) -> bool:
         return (
             self.phase == "day"
