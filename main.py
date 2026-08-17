@@ -6,6 +6,19 @@ import random
 
 import pygame
 
+import pygame
+
+# 引入剛才寫好的音效管理員
+from audio_manager import audio
+
+# --- 遊戲初始化設定 ---
+pygame.init()
+
+# 載入你的實體 .wav 檔案 (請將檔名替換成你實際下載的名稱)
+audio.load_sound("click1", "click1.WAV")      # 介面點擊聲
+audio.load_sound("chop", "chop.WAV")        # 砍樹聲
+audio.load_sound("wolf", "wolf_howl.WAV")   # 狼嚎聲
+
 from building import BuildingManager
 from campfire import Campfire
 from constants import (
@@ -313,16 +326,13 @@ class Game:
     # --------------------------------------------------------
 
     def gather(self):
-
         if self.phase != "day":
             return
 
         if self.actions_left < 1:
-
             self.log(
                 "行動點數不足。"
             )
-
             return
 
         terrain = (
@@ -340,29 +350,42 @@ class Game:
         resource = None
 
         if terrain == "forest":
-
             resource = "wood"
-
         elif terrain == "rock":
-
             resource = "stone"
-
         elif terrain == "grass":
-
             resource = "food"
 
         if (
             resource is None
             or amount_left <= 0
         ):
-
             self.log(
                 "這裡已經沒有可以採集的資源。"
             )
-
             return
 
         amount = 1
+
+        # ==========================================
+        # 咻一下優化區：依照資源種類播放音效與計算加成
+        # ==========================================
+        if resource == "wood":
+            audio.play("chop")
+            # 檢查是否有石斧，有的話採集量變 2
+            if hasattr(self, 'has_axe') and self.has_axe:
+                amount = 2
+                
+        elif resource == "stone":
+            # 替換成你實際的敲石頭音效名稱
+            audio.play("mine") 
+            
+        elif resource == "food":
+            # 使用你剛剛加入的 click1 音效來當作採集草叢聲
+            audio.play("click1") 
+        # ==========================================
+
+        # ... (這裡接著寫你原本把 amount 加進背包、扣除 action_left 的程式碼)
 
         # 石斧採木材 +1
         if (
@@ -371,6 +394,7 @@ class Game:
         ):
 
             amount = 2
+            audio.play("chop")
 
         amount = min(
             amount,
@@ -475,6 +499,12 @@ class Game:
 
             return False
 
+        # ==========================================
+        # ▼ ▼ 加在這裡：成功加入柴火或重新點燃時播放音效 ▼ ▼
+        # ==========================================
+        audio.play_sfx("fire")
+        # ==========================================
+
         if self.phase == "day":
 
             self.actions_left -= 1
@@ -485,7 +515,6 @@ class Game:
         )
 
         return True
-
     # --------------------------------------------------------
     # 石矛
     # --------------------------------------------------------
@@ -747,6 +776,8 @@ class Game:
         self.phase = "night"
 
         self.night_round = 1
+
+        audio.play("wolf")
 
         self.log(
             "夜幕降臨！"
@@ -1258,6 +1289,8 @@ def main():
             ):
 
                 running = False
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                 audio.play("click1")
 
             elif (
                 event.type
@@ -1396,3 +1429,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+    
+    # ... 下面接著原本的移動或點擊邏輯
