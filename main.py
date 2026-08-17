@@ -15,6 +15,7 @@ import random
 
 import pygame
 
+from audio_manager import audio
 from building import BuildingManager
 from campfire import Campfire
 from constants import (
@@ -2195,7 +2196,7 @@ def draw_tutorial(screen, fonts, page: int) -> None:
 
 def main() -> None:
     pygame.init()
-    pygame.display.set_caption("石器時代：荒野求生 v5 - 合成清單")
+    pygame.display.set_caption("石器時代：荒野求生 v6 - 音效整合")
 
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     clock = pygame.time.Clock()
@@ -2212,6 +2213,10 @@ def main() -> None:
     dragging_player = False
     drag_path = None
     recipe_open = False
+
+    # Audio transition state. Gameplay logic remains independent of audio.
+    last_phase = game.phase
+    fire_loop_playing = False
 
     running = True
 
@@ -2283,6 +2288,7 @@ def main() -> None:
 
             if view == "menu":
                 if event.button == 1 and menu_start_rect().collidepoint(mouse):
+                    audio.play_sfx("click")
                     view = "tutorial"
                     tutorial_page = 0
                 continue
@@ -2294,12 +2300,15 @@ def main() -> None:
                 buttons = tutorial_buttons()
 
                 if buttons["back"].collidepoint(mouse) and tutorial_page > 0:
+                    audio.play_sfx("click")
                     tutorial_page -= 1
 
                 elif buttons["skip"].collidepoint(mouse):
+                    audio.play_sfx("click")
                     view = "game"
 
                 elif buttons["next"].collidepoint(mouse):
+                    audio.play_sfx("click")
                     if tutorial_page >= len(TUTORIAL) - 1:
                         view = "game"
                     else:
@@ -2314,6 +2323,7 @@ def main() -> None:
             # 合成清單 Modal
             # -------------------------------------------------
             if event.button == 1 and recipe_button_rect().collidepoint(mouse):
+                audio.play_sfx("click")
                 recipe_open = not recipe_open
                 context_tile = None
                 dragging_player = False
@@ -2325,6 +2335,7 @@ def main() -> None:
                     event.button == 1
                     and recipe_close_rect().collidepoint(mouse)
                 ):
+                    audio.play_sfx("click")
                     recipe_open = False
 
                 # Modal 開啟期間完全阻擋地圖、HUD、攻擊與建造點擊，
@@ -2356,9 +2367,18 @@ def main() -> None:
                 ):
                     if rect.collidepoint(mouse):
                         clicked_menu = True
+                        audio.play_sfx("click")
 
                         if enabled:
+                            gathering_wood = (
+                                action == "gather"
+                                and game.resource_type_at(context_tile) == "wood"
+                            )
+
                             game.execute_context_action(action, context_tile)
+
+                            if gathering_wood:
+                                audio.play_sfx("chop")
 
                         context_tile = None
                         break
@@ -2371,6 +2391,7 @@ def main() -> None:
             for action, label, rect, enabled in hud_buttons(game):
                 if rect.collidepoint(mouse):
                     clicked_hud = True
+                    audio.play_sfx("click")
 
                     if enabled:
                         execute_hud_action(game, action)
@@ -2408,6 +2429,32 @@ def main() -> None:
 
             context_tile = None
 
+        # -------------------------------------------------
+        # Audio state synchronization
+        # -------------------------------------------------
+        if game.phase != last_phase:
+            if game.phase == "night":
+                audio.play_sfx("wolf_howl")
+
+            if last_phase == "night" and game.phase != "night":
+                audio.stop_sfx("fire")
+                fire_loop_playing = False
+
+            last_phase = game.phase
+
+        should_play_fire = (
+            view == "game"
+            and game.phase == "night"
+            and game.campfire.lit
+        )
+
+        if should_play_fire and not fire_loop_playing:
+            fire_loop_playing = audio.play_sfx("fire", loops=-1)
+
+        elif not should_play_fire and fire_loop_playing:
+            audio.stop_sfx("fire")
+            fire_loop_playing = False
+
         if view == "menu":
             draw_menu(screen, fonts)
 
@@ -2428,6 +2475,7 @@ def main() -> None:
         pygame.display.flip()
         clock.tick(FPS)
 
+    audio.stop_all()
     pygame.quit()
 
 
