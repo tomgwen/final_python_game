@@ -31,6 +31,7 @@ from constants import (
 )
 from enemy import calculate_player_damage, claim_loot, create_enemy, damage_enemy
 from inventory import Inventory
+from pathfinding import find_hex_path
 from survival import SurvivalStats
 
 
@@ -332,6 +333,116 @@ class Game:
 
         self.advance_night_turn()
         return True
+
+    def path_is_walkable(self, tile: tuple[int, int]) -> bool:
+        """Return whether the player may route through a map tile."""
+        return self.terrain[tile] != "water"
+
+    def preview_drag_path(
+        self,
+        target: tuple[int, int],
+    ) -> list[tuple[int, int]] | None:
+        """Return the current shortest path used by drag movement."""
+        if self.phase not in ("day", "night"):
+            return None
+
+        blocked: set[tuple[int, int]] = set()
+
+        if self.phase == "night":
+            blocked = {
+                enemy.position
+                for enemy in self.alive_enemies()
+            }
+            blocked.discard(self.player)
+
+        return find_hex_path(
+            self.player,
+            target,
+            is_walkable=self.path_is_walkable,
+            blocked=blocked,
+        )
+
+    def execute_drag_path(
+        self,
+        path: list[tuple[int, int]] | None,
+    ) -> bool:
+        """Execute a previewed drag path while preserving turn costs.
+
+        Day:
+            Every crossed hex edge costs one day turn. If the entire
+            path costs more turns than remain, the move is rejected
+            before the player moves at all.
+
+        Night:
+            Every crossed hex edge costs one night turn and triggers
+            the normal enemy phase. The route stops immediately if the
+            phase changes, the player dies, or the next tile becomes
+            blocked by an enemy.
+        """
+        if not path:
+            return False
+
+        if path[0] != self.player:
+            return False
+
+        movement_cost = len(path) - 1
+
+        if movement_cost <= 0:
+            return False
+
+        if self.phase == "day":
+            if movement_cost > self.day_turns_left:
+                self.log(
+                    f"路徑需要 {movement_cost} 回合，"
+                    f"但目前只剩 {self.day_turns_left} 回合。"
+                )
+                return False
+
+            destination = path[-1]
+
+            for step in path[1:]:
+                if self.phase != "day":
+                    break
+
+                if not self.move_to(step):
+                    return False
+
+            if self.player == destination:
+                self.log(
+                    f"快速移動完成，共消耗 {movement_cost} 回合。"
+                )
+
+            return True
+
+        if self.phase == "night":
+            if movement_cost > self.night_turns_left:
+                self.log(
+                    f"夜間路徑需要 {movement_cost} 回合，"
+                    f"但目前只剩 {self.night_turns_left} 回合。"
+                )
+                return False
+
+            moved = False
+
+            for step in path[1:]:
+                if self.phase != "night":
+                    break
+
+                if not self.can_move_night_to(step):
+                    self.log("路徑被敵人阻擋，快速移動中止。")
+                    break
+
+                if not self.move_night_to(step):
+                    break
+
+                moved = True
+
+                if self.survival.is_dead():
+                    break
+
+            return moved
+
+        return False
 
     def resource_type_at(self, tile: tuple[int, int]) -> str | None:
         terrain = self.terrain[tile]
@@ -1471,13 +1582,13 @@ def draw_selected_tile_info(surface, fonts, game) -> None:
     text(surface, fonts["small"], detail, 1050, 454, TEXT)
 
 
-def draw_game(screen, fonts, game, context_tile, context_origin) -> None:
+def draw_game(screen, fonts, game, context_tile, context_origin, drag_path=None) -> None:
     screen.fill(BG)
 
     pygame.draw.rect(screen, TOP, pygame.Rect(0, 0, SCREEN_WIDTH, 62))
 
-    text(screen, fonts["heading"], "石器時代：荒野求生 v3", 28, 18, GOLD_LIGHT)
-    text(screen, fonts["small"], "左鍵選取｜右鍵開啟操作選單", 345, 22, MUTED)
+    text(screen, fonts["heading"], "石器時代：荒野求生 v4", 28, 18, GOLD_LIGHT)
+    text(screen, fonts["small"], "拖曳角色＝快速移動｜右鍵＝操作選單", 345, 22, MUTED)
 
     if game.phase == "day":
         phase_label = f"第 {game.day} 天"
@@ -1541,6 +1652,53 @@ def draw_game(screen, fonts, game, context_tile, context_origin) -> None:
 
             if tile == game.selected_tile:
                 pygame.draw.polygon(screen, GOLD_LIGHT, points, 3)
+
+    # 拖曳中的最短路徑預覽。
+    if drag_path and len(drag_path) > 1:
+        centers = [
+            axial_to_pixel(tile)
+            for tile in drag_path
+        ]
+
+        pygame.draw.lines(
+            screen,
+            GOLD_LIGHT,
+            False,
+            centers,
+            4,
+        )
+
+        for index, tile in enumerate(drag_path):
+            center = axial_to_pixel(tile)
+
+            pygame.draw.polygon(
+                screen,
+                GOLD_LIGHT,
+                hex_points(center),
+                3,
+            )
+
+            if index > 0:
+                marker_radius = 7 if index == len(drag_path) - 1 else 5
+
+                pygame.draw.circle(
+                    screen,
+                    (255, 235, 160),
+                    center,
+                    marker_radius,
+                )
+
+        cost = len(drag_path) - 1
+        destination = axial_to_pixel(drag_path[-1])
+
+        text(
+            screen,
+            fonts["tiny"],
+            f"移動成本：{cost} 回合",
+            destination[0] + 18,
+            destination[1] - 30,
+            GOLD_LIGHT,
+        )
 
     if game.phase == "night":
         tint = pygame.Surface((MAP_PANEL.width, MAP_PANEL.height), pygame.SRCALPHA)
@@ -1658,10 +1816,10 @@ def draw_game(screen, fonts, game, context_tile, context_origin) -> None:
     draw_selected_tile_info(screen, fonts, game)
 
     if game.phase == "day":
-        text(screen, fonts["small"], "右鍵地圖：移動 / 採集 / 建造", 855, 487, GOLD_LIGHT)
+        text(screen, fonts["small"], "拖曳角色快速移動｜右鍵：採集 / 建造", 855, 487, GOLD_LIGHT)
 
     elif game.phase == "night":
-        text(screen, fonts["small"], "左鍵相鄰格＝移動｜左鍵敵人＝攻擊", 855, 487, BLUE)
+        text(screen, fonts["small"], "拖曳角色＝移動｜左鍵敵人＝攻擊", 855, 487, BLUE)
 
     else:
         text(screen, fonts["small"], "你沒有撐過這次荒野求生。", 855, 487, RED)
@@ -1684,7 +1842,8 @@ TUTORIAL = [
     (
         "滑鼠操作",
         [
-            "左鍵點六角格：選取並查看資訊。",
+            "左鍵按住玩家角色並拖曳：預覽最短路徑並快速移動。",
+            "左鍵點六角格仍可選取並查看資訊。",
             "右鍵點任意地圖格：開啟情境操作選單。",
             "白天的移動、採集、建造都從右鍵選單進行。",
             "右側按鈕可吃食物、加柴或製作裝備。",
@@ -1703,7 +1862,7 @@ TUTORIAL = [
         "夜晚 20 回合",
         [
             "狼與野豬會真的從地圖邊緣出現並向營地移動。",
-            "晚上左鍵點相鄰空格即可直接移動，每次移動消耗 1 回合。",
+            "晚上也能拖曳角色移動；每走 1 格仍會消耗 1 回合並觸發敵人行動。",
             "左鍵點攻擊範圍內的敵人即可直接攻擊；右鍵仍可開啟選單。",
             "每次你的夜晚行動後，所有敵人會移動或攻擊。",
             "木牆會擋住敵人；陷阱會在敵人踩上去時造成傷害。",
@@ -1838,7 +1997,7 @@ def draw_tutorial(screen, fonts, page: int) -> None:
 
 def main() -> None:
     pygame.init()
-    pygame.display.set_caption("石器時代：荒野求生 v3 - 夜間移動修正版")
+    pygame.display.set_caption("石器時代：荒野求生 v4 - 拖曳快速移動")
 
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     clock = pygame.time.Clock()
@@ -1851,6 +2010,9 @@ def main() -> None:
 
     context_tile = None
     context_origin = (0, 0)
+
+    dragging_player = False
+    drag_path = None
 
     running = True
 
@@ -1871,6 +2033,42 @@ def main() -> None:
                     view = "tutorial"
                     tutorial_page = 0
                     context_tile = None
+
+            # -------------------------------------------------
+            # 玩家拖曳：移動中持續更新最短路徑預覽
+            # -------------------------------------------------
+            if (
+                view == "game"
+                and event.type == pygame.MOUSEMOTION
+                and dragging_player
+            ):
+                tile = tile_at_pixel(event.pos)
+
+                if tile is None:
+                    drag_path = None
+                else:
+                    game.selected_tile = tile
+                    drag_path = game.preview_drag_path(tile)
+
+                continue
+
+            # -------------------------------------------------
+            # 玩家拖曳：放開左鍵後才正式執行路徑
+            # -------------------------------------------------
+            if (
+                view == "game"
+                and event.type == pygame.MOUSEBUTTONUP
+                and event.button == 1
+                and dragging_player
+            ):
+                dragging_player = False
+
+                if drag_path and len(drag_path) > 1:
+                    game.execute_drag_path(drag_path)
+
+                drag_path = None
+                context_tile = None
+                continue
 
             if event.type != pygame.MOUSEBUTTONDOWN:
                 continue
@@ -1958,6 +2156,16 @@ def main() -> None:
 
             tile = tile_at_pixel(mouse)
 
+            # 只有從玩家目前所在的 hex 按住左鍵，才進入拖曳模式。
+            if (
+                tile == game.player
+                and game.phase in ("day", "night")
+            ):
+                dragging_player = True
+                drag_path = [game.player]
+                context_tile = None
+                continue
+
             if tile is not None:
                 game.selected_tile = tile
 
@@ -1986,6 +2194,7 @@ def main() -> None:
                 game,
                 context_tile,
                 context_origin,
+                drag_path,
             )
 
         pygame.display.flip()
