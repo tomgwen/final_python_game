@@ -2,11 +2,14 @@
 
 from dataclasses import dataclass
 
+from constants import (
+    BUILD_TRAP,
+    BUILD_WALL,
+    TRAP_MAX_HP,
+    WALL_MAX_HP,
+)
 from inventory import Inventory
 
-
-BUILD_WALL = "wall"
-BUILD_TRAP = "trap"
 
 WALL_COST = {"wood": 3}
 TRAP_COST = {"wood": 2, "stone": 1}
@@ -20,6 +23,7 @@ class Building:
     position: tuple[int, int]
     hp: int
     max_hp: int
+    active: bool = True
 
 
 class BuildingManager:
@@ -62,15 +66,17 @@ class BuildingManager:
             building = Building(
                 building_type=BUILD_WALL,
                 position=position,
-                hp=60,
-                max_hp=60,
+                hp=WALL_MAX_HP,
+                max_hp=WALL_MAX_HP,
+                active=True,
             )
         else:
             building = Building(
                 building_type=BUILD_TRAP,
                 position=position,
-                hp=1,
-                max_hp=1,
+                hp=TRAP_MAX_HP,
+                max_hp=TRAP_MAX_HP,
+                active=True,
             )
 
         self.buildings[position] = building
@@ -108,7 +114,7 @@ class BuildingManager:
         return True
 
     def trigger_trap(self, position: tuple[int, int]) -> bool:
-        """Trigger and remove a trap at the given position."""
+        """Trigger an active trap without removing it from the map."""
         building = self.get_building(position)
 
         if building is None:
@@ -117,5 +123,8 @@ class BuildingManager:
         if building.building_type != BUILD_TRAP:
             return False
 
-        del self.buildings[position]
+        if not building.active:
+            return False
+
+        building.active = False
         return True

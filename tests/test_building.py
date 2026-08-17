@@ -1,7 +1,9 @@
-from building import (
+from building import BuildingManager
+from constants import (
     BUILD_TRAP,
     BUILD_WALL,
-    BuildingManager,
+    TRAP_MAX_HP,
+    WALL_MAX_HP,
 )
 from inventory import Inventory
 
@@ -16,8 +18,9 @@ def test_build_wall_success():
 
     assert wall is not None
     assert wall.building_type == BUILD_WALL
-    assert wall.hp == 60
-    assert wall.max_hp == 60
+    assert wall.hp == WALL_MAX_HP
+    assert wall.max_hp == WALL_MAX_HP
+    assert wall.active is True
     assert inventory.get("wood") == 2
 
 
@@ -31,8 +34,9 @@ def test_build_trap_success():
 
     assert trap is not None
     assert trap.building_type == BUILD_TRAP
-    assert trap.hp == 1
-    assert trap.max_hp == 1
+    assert trap.hp == TRAP_MAX_HP
+    assert trap.max_hp == TRAP_MAX_HP
+    assert trap.active is True
     assert inventory.get("wood") == 3
     assert inventory.get("stone") == 1
 
@@ -79,8 +83,9 @@ def test_damage_wall():
     assert manager.damage_building((2, 2), 20) is True
 
     wall = manager.get_building((2, 2))
+
     assert wall is not None
-    assert wall.hp == 40
+    assert wall.hp == WALL_MAX_HP - 20
 
 
 def test_wall_removed_when_hp_reaches_zero():
@@ -89,7 +94,7 @@ def test_wall_removed_when_hp_reaches_zero():
 
     manager.build(BUILD_WALL, (2, 2), inventory)
 
-    assert manager.damage_building((2, 2), 60) is True
+    assert manager.damage_building((2, 2), WALL_MAX_HP) is True
     assert manager.get_building((2, 2)) is None
 
 
@@ -116,14 +121,34 @@ def test_negative_damage_raises_value_error():
         pass
 
 
-def test_trigger_trap_removes_trap():
+def test_trigger_trap_marks_it_inactive_and_keeps_it():
     inventory = Inventory()
     manager = BuildingManager()
 
     manager.build(BUILD_TRAP, (5, 5), inventory)
 
     assert manager.trigger_trap((5, 5)) is True
-    assert manager.get_building((5, 5)) is None
+
+    trap = manager.get_building((5, 5))
+
+    assert trap is not None
+    assert trap.building_type == BUILD_TRAP
+    assert trap.active is False
+
+
+def test_inactive_trap_cannot_trigger_again():
+    inventory = Inventory()
+    manager = BuildingManager()
+
+    manager.build(BUILD_TRAP, (5, 5), inventory)
+
+    assert manager.trigger_trap((5, 5)) is True
+    assert manager.trigger_trap((5, 5)) is False
+
+    trap = manager.get_building((5, 5))
+
+    assert trap is not None
+    assert trap.active is False
 
 
 def test_triggering_non_trap_returns_false():
