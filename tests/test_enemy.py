@@ -24,7 +24,7 @@ def test_create_wolf():
     assert wolf.enemy_type == ENEMY_WOLF
     assert wolf.position == (0, 0)
     assert wolf.health == 30
-    assert wolf.damage == 10
+    assert wolf.damage == 6
     assert wolf.move_range == 2
     assert wolf.fear_of_fire is True
     assert wolf.alive is True
@@ -37,7 +37,7 @@ def test_create_boar():
     assert boar.enemy_type == ENEMY_BOAR
     assert boar.position == (10, 7)
     assert boar.health == 55
-    assert boar.damage == 15
+    assert boar.damage == 10
     assert boar.move_range == 1
     assert boar.fear_of_fire is False
     assert boar.alive is True

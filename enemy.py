@@ -40,7 +40,7 @@ def create_enemy(
             enemy_type=ENEMY_WOLF,
             position=position,
             health=30,
-            damage=10,
+            damage=6,
             move_range=2,
             fear_of_fire=True,
         )
@@ -50,7 +50,7 @@ def create_enemy(
             enemy_type=ENEMY_BOAR,
             position=position,
             health=55,
-            damage=15,
+            damage=10,
             move_range=1,
             fear_of_fire=False,
         )
