@@ -15,6 +15,9 @@ import math
 import os
 import random
 
+import intro
+import game_over
+
 import pygame
 
 from visuals import VisualManager
@@ -2081,6 +2084,13 @@ def main() -> None:
     try:
         pygame.init()
         pygame.display.set_caption("石器時代：荒野求生 v6 - 音效整合")
+
+        start_game = intro.play_intro()
+
+        if not start_game:
+            pygame.quit()
+            return
+
         screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         clock = pygame.time.Clock()
         fonts = create_fonts()
@@ -2118,6 +2128,7 @@ def main() -> None:
     
     last_phase = game.phase
     fire_loop_playing = False
+    main_bgm_playing = False
     running = True
 
     while running:
@@ -2318,11 +2329,32 @@ def main() -> None:
             and game.phase == "night"
             and bool(game.lit_campfires())
         )
+
         if should_play_fire and not fire_loop_playing:
             fire_loop_playing = audio.play_sfx("fire", loops=-1)
         elif not should_play_fire and fire_loop_playing:
             audio.stop_sfx("fire")
             fire_loop_playing = False
+
+        should_play_main_bgm = (
+            view == "game"
+            and game.phase != "game_over"
+        )
+
+        if should_play_main_bgm and not main_bgm_playing:
+            music_path = os.path.join("assets", "audio", "old.wav")
+
+            if os.path.exists(music_path):
+                try:
+                    pygame.mixer.music.load(music_path)
+                    pygame.mixer.music.play(-1)
+                    main_bgm_playing = True
+                except pygame.error as exc:
+                    print(f"背景音樂播放失敗：{exc}")
+
+        elif not should_play_main_bgm and main_bgm_playing:
+            pygame.mixer.music.fadeout(1000)
+            main_bgm_playing = False
 
         anim_timer += 1
 
@@ -2344,7 +2376,6 @@ def main() -> None:
         if view == "game" and game.floating_icon_type is not None:
             if pygame.time.get_ticks() - game.floating_icon_start_time > 1000:
                 game.floating_icon_type = None
-
         # =====================================================
         # 畫面渲染 (Render Phase)
         # =====================================================
