@@ -526,6 +526,7 @@ class Game:
             and self.terrain[tile] != "water"
             and hex_distance(self.player, tile) <= 2
             and self.buildings.get_building(tile) is None
+            and self.campfire_at(tile) is None
         )
 
     def build_at(self, building_type: str, tile: tuple[int, int]) -> bool:
@@ -543,7 +544,37 @@ class Game:
         self.log(f"在 {tile} 建造{name}。")
         self.spend_day_turn()
         return True
+    def can_build_campfire_at(self, tile: tuple[int, int]) -> bool:
+        return (
+            self.phase == "day"
+            and tile in self.discovered
+            and tile in self.terrain
+            and self.terrain[tile] != "water"
+            and hex_distance(self.player, tile) <= 2
+            and self.buildings.get_building(tile) is None
+            and self.campfire_at(tile) is None
+        )
 
+
+    def build_campfire_at(self, tile: tuple[int, int]) -> bool:
+        if not self.can_build_campfire_at(tile):
+            self.log("這個位置無法建造營火；必須是已探索、距離 2 格內的空地。")
+            return False
+
+        cost = {
+            "wood": 3,
+            "stone": 2,
+        }
+
+        if not self.inventory.spend(cost):
+            self.log("營火需要 3 木材 + 2 石頭。")
+            return False
+
+        self.campfires[tile] = Campfire(tile)
+
+        self.log(f"在 {tile} 建造營火。")
+        self.spend_day_turn()
+        return True
     # =====================================================
     # 生存 / 製作
     # =====================================================
@@ -932,6 +963,7 @@ class Game:
                 ("gather", "採集這裡", self.can_gather_at(tile)),
                 ("wall", "建造木牆（3 木材）", self.can_build_at(tile) and self.inventory.has({"wood": 3})),
                 ("trap", "建造陷阱（2 木材 + 1 石頭）", self.can_build_at(tile) and self.inventory.has({"wood": 2, "stone": 1})),
+                ("campfire_build","建造營火（3 木材 + 2 石頭）",self.can_build_campfire_at(tile)and self.inventory.has({"wood": 3, "stone": 2}),),
             ]
         if self.phase == "night":
             enemies = self.enemies_at(tile)
@@ -960,6 +992,8 @@ class Game:
             self.build_at(BUILD_WALL, tile)
         elif action == "trap":
             self.build_at(BUILD_TRAP, tile)
+        elif action == "campfire_build":
+            self.build_campfire_at(tile)
         elif action == "attack":
             self.attack_enemy_at(tile)
         elif action == "fire":
@@ -1648,7 +1682,12 @@ def draw_game(
         else:
             draw_trap(screen, center, building.active)
             
-    draw_campfire(screen, axial_to_pixel(CAMP_POSITION), game.campfire.lit)
+    for campfire in game.campfires.values():
+        draw_campfire(
+            screen,
+            axial_to_pixel(campfire.position),
+            campfire.lit,
+        )
 
     # =====================================================
     # 敵人
