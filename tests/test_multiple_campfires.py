@@ -190,6 +190,7 @@ def test_cannot_refuel_specific_campfire_from_far_away():
     assert second.fuel == 3
     assert game.inventory.get("wood") == wood_before
     assert game.day_turns_left == turns_before
+
 def test_all_campfires_consume_fuel_each_night_turn():
     game = Game()
 
@@ -211,8 +212,8 @@ def test_all_campfires_consume_fuel_each_night_turn():
 
     # 避免測試因為沒有敵人而提前結束夜晚。
     game.enemy_phase = lambda: None
+    game.apply_campfire_night_effects = lambda: None
     game.alive_enemies = lambda: [object()]
-
     game.advance_night_turn()
 
     assert game.campfire.fuel == primary_before - 1
@@ -242,6 +243,7 @@ def test_one_campfire_can_extinguish_without_affecting_another():
     game.night_turns_left = 20
 
     game.enemy_phase = lambda: None
+    game.apply_campfire_night_effects = lambda: None
     game.alive_enemies = lambda: [object()]
 
     game.advance_night_turn()
@@ -298,3 +300,15 @@ def test_second_lit_campfire_also_provides_safe_range():
     game.campfires[second_position] = second
 
     assert game.is_in_lit_campfire_range(second_position) is True
+def test_enemy_inside_lit_campfire_range_takes_two_damage():
+    game = Game()
+    game.spawn_enemies()
+
+    enemy = game.enemies[0]
+    enemy.position = CAMP_POSITION
+
+    health_before = enemy.health
+
+    game.apply_campfire_night_effects()
+
+    assert enemy.health == health_before - 2

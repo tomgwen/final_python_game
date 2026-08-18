@@ -849,10 +849,28 @@ class Game:
     # =====================================================
     # 夜晚回合推進與敵人 AI
     # =====================================================
+    def apply_campfire_night_effects(self) -> None:
+        # 玩家若不在任何點燃營火的 4 格範圍內，直接失去 1 HP。
+        if not self.is_in_lit_campfire_range(self.player):
+            self.survival.health = max(0, self.survival.health - 1)
+            self.log("你遠離營火，在黑暗與寒冷中失去 1 HP。")
+
+        # 所有位於任一點燃營火範圍內的敵人受到 2 點傷害。
+        for enemy in list(self.alive_enemies()):
+            if not self.is_in_lit_campfire_range(enemy.position):
+                continue
+
+            defeated = damage_enemy(enemy, 2)
+
+            name = "野豬" if enemy.enemy_type == ENEMY_BOAR else "狼"
+            self.log(f"{name}受到營火灼熱影響，失去 2 HP。")
+
+            if defeated:
+                self.collect_loot(enemy)
     def advance_night_turn(self) -> None:
         if self.phase != "night":
             return
-            
+        self.apply_campfire_night_effects()
         self.night_turns_left = max(0, self.night_turns_left - 1)
         self.enemy_phase()
         
