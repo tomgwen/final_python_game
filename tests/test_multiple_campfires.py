@@ -251,3 +251,50 @@ def test_one_campfire_can_extinguish_without_affecting_another():
 
     assert second.fuel == 2
     assert second.lit is True
+def test_tile_inside_lit_campfire_radius_four_is_safe():
+    game = Game()
+
+    tile = next(
+        tile
+        for tile in game.terrain
+        if hex_distance(tile, CAMP_POSITION) == 4
+    )
+
+    assert game.is_in_lit_campfire_range(tile) is True
+
+
+def test_tile_outside_lit_campfire_radius_four_is_not_safe():
+    game = Game()
+
+    tile = next(
+        tile
+        for tile in game.terrain
+        if hex_distance(tile, CAMP_POSITION) > 4
+    )
+
+    assert game.is_in_lit_campfire_range(tile) is False
+
+
+def test_extinguished_campfire_does_not_provide_safe_range():
+    game = Game()
+
+    game.campfire.lit = False
+    game.campfire.fuel = 0
+
+    assert game.is_in_lit_campfire_range(CAMP_POSITION) is False
+
+
+def test_second_lit_campfire_also_provides_safe_range():
+    game = Game()
+
+    second_position = next(
+        tile
+        for tile in game.terrain
+        if hex_distance(tile, CAMP_POSITION) > 4
+        and game.terrain[tile] != "water"
+    )
+
+    second = Campfire(second_position)
+    game.campfires[second_position] = second
+
+    assert game.is_in_lit_campfire_range(second_position) is True

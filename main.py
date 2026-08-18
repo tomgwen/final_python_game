@@ -310,7 +310,15 @@ class Game:
     def is_near_campfire(self, campfire: Campfire) -> bool:
         """Return True when the player is on or adjacent to the campfire."""
         return hex_distance(self.player, campfire.position) <= 1
-
+    def is_in_lit_campfire_range(
+        self,
+        tile: tuple[int, int],
+        radius: int = 4,
+    ) -> bool:
+        return any(
+            hex_distance(tile, campfire.position) <= radius
+            for campfire in self.lit_campfires()
+        )
     def lit_campfires(self) -> list[Campfire]:
         """Return all currently lit campfires."""
         return [
