@@ -307,7 +307,9 @@ class Game:
     def campfire_at(self, tile: tuple[int, int]) -> Campfire | None:
         """Return the campfire at tile, if one exists."""
         return self.campfires.get(tile)
-
+    def is_near_campfire(self, campfire: Campfire) -> bool:
+        """Return True when the player is on or adjacent to the campfire."""
+        return hex_distance(self.player, campfire.position) <= 1
 
     def lit_campfires(self) -> list[Campfire]:
         """Return all currently lit campfires."""
@@ -558,6 +560,10 @@ class Game:
     def add_firewood_day(self) -> bool:
         if self.phase != "day":
             return False
+        if not self.is_near_campfire(self.campfire):
+            self.log("你必須在營火一格範圍內才能補充或重新點燃營火。")
+            return False
+
         success = (
             self.campfire.add_fuel(self.inventory)
             if self.campfire.lit
@@ -686,7 +692,9 @@ class Game:
     def attack_enemy_at(self, tile: tuple[int, int]) -> bool:
         if self.phase != "night":
             return False
-
+        if not self.is_near_campfire(self.campfire):
+            self.log("你必須靠近營火才能處理營火。")
+            return False
         if self.attack_animating:
             self.log("攻擊動作尚未完成。")
             return False
