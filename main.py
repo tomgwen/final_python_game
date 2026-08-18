@@ -252,6 +252,11 @@ class Game:
 
     def reset(self) -> None:
         self.terrain, self.resources = create_world()
+
+        # 記錄每一格資源在哪一天被採集殆盡。
+        # key = tile, value = depleted day
+        self.resource_depleted_day: dict[tuple[int, int], int] = {}
+
         self.inventory = Inventory()
         self.survival = SurvivalStats()
         self.buildings = BuildingManager()
@@ -426,6 +431,12 @@ class Game:
         if resource_type is None:
             return False
         return self.resource_amount_at(tile) <= 0
+    
+    def regenerate_resources(self) -> None:
+        for tile, depleted_day in list(self.resource_depleted_day.items()):
+            if self.day - depleted_day >= 2:
+                self.resources[tile] = 6
+                del self.resource_depleted_day[tile]
 
     def can_gather_at(self, tile: tuple[int, int]) -> bool:
         return (
@@ -445,6 +456,10 @@ class Game:
         amount = min(amount, self.resources[tile])
         
         self.resources[tile] -= amount
+
+        if self.resources[tile] == 0:
+            self.resource_depleted_day[tile] = self.day
+
         self.inventory.add(resource, amount)
         self.log(f"採集到 {amount} 個{RESOURCE_NAMES[resource]}。")
         
@@ -853,6 +868,7 @@ class Game:
     def finish_night(self) -> None:
         self.enemies = []
         self.day += 1
+        self.regenerate_resources()
         self.phase = "day"
         self.day_turns_left = DAY_TURNS
         self.night_turns_left = 0
