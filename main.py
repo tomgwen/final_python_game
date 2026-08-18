@@ -931,7 +931,10 @@ class Game:
             candidate_distance = hex_distance(candidate, CAMP_POSITION)
             if candidate_distance >= current_distance:
                 continue
-            if enemy.enemy_type == ENEMY_WOLF and self.campfire.lit and candidate_distance <= 1:
+            if (
+                enemy.enemy_type == ENEMY_WOLF
+                and self.is_in_lit_campfire_range(candidate)
+            ):
                 continue
             candidates.append(candidate)
             

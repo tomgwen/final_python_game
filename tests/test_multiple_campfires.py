@@ -1,6 +1,8 @@
 from main import Game, CAMP_POSITION
 from main import Game, CAMP_POSITION, hex_distance
 from campfire import Campfire
+from enemy import create_enemy
+from constants import ENEMY_WOLF, ENEMY_BOAR
 
 def test_game_starts_with_one_primary_campfire():
     game = Game()
@@ -312,3 +314,50 @@ def test_enemy_inside_lit_campfire_range_takes_two_damage():
     game.apply_campfire_night_effects()
 
     assert enemy.health == health_before - 2
+def find_wolf_test_position(game: Game) -> tuple[int, int]:
+    for tile in game.terrain:
+        if game.terrain[tile] == "water":
+            continue
+
+        if hex_distance(tile, CAMP_POSITION) != 5:
+            continue
+
+        closer_tiles = [
+            neighbor
+            for neighbor in __import__("main").neighbors(tile)
+            if neighbor in game.terrain
+            and game.terrain[neighbor] != "water"
+            and hex_distance(neighbor, CAMP_POSITION) == 4
+        ]
+
+        if closer_tiles:
+            return tile
+
+    raise AssertionError("No suitable wolf test position found")
+
+
+def test_wolf_will_not_enter_lit_campfire_radius():
+    game = Game()
+
+    start = find_wolf_test_position(game)
+    wolf = create_enemy(ENEMY_WOLF, start)
+
+    moved = game.enemy_step(wolf)
+
+    assert moved is False
+    assert wolf.position == start
+
+
+def test_wolf_can_approach_when_campfire_is_extinguished():
+    game = Game()
+
+    start = find_wolf_test_position(game)
+    wolf = create_enemy(ENEMY_WOLF, start)
+
+    game.campfire.lit = False
+    game.campfire.fuel = 0
+
+    moved = game.enemy_step(wolf)
+
+    assert moved is True
+    assert hex_distance(wolf.position, CAMP_POSITION) == 4
