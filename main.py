@@ -588,22 +588,27 @@ class Game:
         self.spend_day_turn()
         return True
 
-    def add_firewood_day(self) -> bool:
+    def add_firewood_day(self, campfire: Campfire | None = None) -> bool:
         if self.phase != "day":
             return False
-        if not self.is_near_campfire(self.campfire):
+
+        target_campfire = campfire if campfire is not None else self.campfire
+
+        if not self.is_near_campfire(target_campfire):
             self.log("你必須在營火一格範圍內才能補充或重新點燃營火。")
             return False
 
         success = (
-            self.campfire.add_fuel(self.inventory)
-            if self.campfire.lit
-            else self.campfire.relight(self.inventory)
+            target_campfire.add_fuel(self.inventory)
+            if target_campfire.lit
+            else target_campfire.relight(self.inventory)
         )
+
         if not success:
             self.log("需要木材才能補充或重新點燃營火。")
             return False
-        self.log(f"營火燃料目前為 {self.campfire.fuel}/12。")
+
+        self.log(f"營火燃料目前為 {target_campfire.fuel}/12。")
         self.spend_day_turn()
         return True
 
@@ -800,18 +805,27 @@ class Game:
     # =====================================================
     # 夜晚其他行動
     # =====================================================
-    def add_firewood_night(self) -> bool:
+    def add_firewood_night(self, campfire: Campfire | None = None) -> bool:
         if self.phase != "night":
             return False
+
+        target_campfire = campfire if campfire is not None else self.campfire
+
+        if not self.is_near_campfire(target_campfire):
+            self.log("你必須在營火一格範圍內才能補充或重新點燃營火。")
+            return False
+
         success = (
-            self.campfire.add_fuel(self.inventory)
-            if self.campfire.lit
-            else self.campfire.relight(self.inventory)
+            target_campfire.add_fuel(self.inventory)
+            if target_campfire.lit
+            else target_campfire.relight(self.inventory)
         )
+
         if not success:
             self.log("沒有木材，無法處理營火。")
             return False
-        self.log(f"你處理了營火，目前燃料 {self.campfire.fuel}/12。")
+
+        self.log(f"你處理了營火，目前燃料 {target_campfire.fuel}/12。")
         self.advance_night_turn()
         return True
 
@@ -958,29 +972,88 @@ class Game:
     # =====================================================
     def context_actions(self, tile: tuple[int, int]) -> list[tuple[str, str, bool]]:
         if self.phase == "day":
-            return [
+            actions = [
                 ("move", "移動到這裡", self.can_move_to(tile)),
                 ("gather", "採集這裡", self.can_gather_at(tile)),
-                ("wall", "建造木牆（3 木材）", self.can_build_at(tile) and self.inventory.has({"wood": 3})),
-                ("trap", "建造陷阱（2 木材 + 1 石頭）", self.can_build_at(tile) and self.inventory.has({"wood": 2, "stone": 1})),
-                ("campfire_build","建造營火（3 木材 + 2 石頭）",self.can_build_campfire_at(tile)and self.inventory.has({"wood": 3, "stone": 2}),),
+                (
+                    "wall",
+                    "建造木牆（3 木材）",
+                    self.can_build_at(tile)
+                    and self.inventory.has({"wood": 3}),
+                ),
+                (
+                    "trap",
+                    "建造陷阱（2 木材 + 1 石頭）",
+                    self.can_build_at(tile)
+                    and self.inventory.has({"wood": 2, "stone": 1}),
+                ),
+                (
+                    "campfire_build",
+                    "建造營火（3 木材 + 2 石頭）",
+                    self.can_build_campfire_at(tile)
+                    and self.inventory.has({"wood": 3, "stone": 2}),
+                ),
             ]
+
+            campfire = self.campfire_at(tile)
+
+            if campfire is not None:
+                actions.append(
+                    (
+                        "fire",
+                        "補充 / 重新點燃營火",
+                        self.is_near_campfire(campfire)
+                        and self.inventory.get("wood") > 0,
+                    )
+                )
+
+            return actions
         if self.phase == "night":
             enemies = self.enemies_at(tile)
             attack_range = 2 if self.has_spear else 1
+
             can_attack = (
                 bool(enemies)
                 and hex_distance(self.player, tile) <= attack_range
                 and not self.attack_animating
             )
-            return [
-                ("night_move", "移動到這裡", self.can_move_night_to(tile) and not self.attack_animating),
-                ("attack", "攻擊這個敵人", can_attack),
-                ("fire", "補充 / 重新點燃營火", self.inventory.get("wood") > 0 and not self.attack_animating),
-                ("wait", "結束這個夜晚回合", not self.attack_animating),
-            ]
-        return []
 
+            actions = [
+                (
+                    "night_move",
+                    "移動到這裡",
+                    self.can_move_night_to(tile)
+                    and not self.attack_animating,
+                ),
+                (
+                    "attack",
+                    "攻擊這個敵人",
+                    can_attack,
+                ),
+            ]
+
+            campfire = self.campfire_at(tile)
+
+            if campfire is not None:
+                actions.append(
+                    (
+                        "fire",
+                        "補充 / 重新點燃營火",
+                        self.is_near_campfire(campfire)
+                        and self.inventory.get("wood") > 0
+                        and not self.attack_animating,
+                    )
+                )
+
+            actions.append(
+                (
+                    "wait",
+                    "結束這個夜晚回合",
+                    not self.attack_animating,
+                )
+            )
+
+            return actions
     def execute_context_action(self, action: str, tile: tuple[int, int]) -> None:
         if action == "move":
             self.move_to(tile)
@@ -997,10 +1070,15 @@ class Game:
         elif action == "attack":
             self.attack_enemy_at(tile)
         elif action == "fire":
+            campfire = self.campfire_at(tile)
+
+            if campfire is None:
+                return
+
             if self.phase == "day":
-                self.add_firewood_day()
+                self.add_firewood_day(campfire)
             else:
-                self.add_firewood_night()
+                self.add_firewood_night(campfire)
         elif action == "wait":
             self.pass_night_turn()
 

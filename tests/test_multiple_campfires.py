@@ -1,5 +1,6 @@
 from main import Game, CAMP_POSITION
 from main import Game, CAMP_POSITION, hex_distance
+from campfire import Campfire
 
 def test_game_starts_with_one_primary_campfire():
     game = Game()
@@ -138,3 +139,54 @@ def test_cannot_build_wall_or_trap_on_campfire_tile():
 
     assert game.campfire_at(tile) is not None
     assert game.can_build_at(tile) is False
+
+def test_can_refuel_specific_second_campfire():
+    game = Game()
+
+    second_position = next(
+        tile
+        for tile in game.terrain
+        if tile != CAMP_POSITION
+        and hex_distance(tile, CAMP_POSITION) == 1
+        and game.terrain[tile] != "water"
+    )
+
+    second = Campfire(second_position)
+    second.fuel = 3
+    game.campfires[second_position] = second
+
+    game.player = second_position
+    game.inventory.add("wood", 1)
+
+    primary_fuel_before = game.campfire.fuel
+
+    assert game.add_firewood_day(second) is True
+
+    assert second.fuel == 5
+    assert game.campfire.fuel == primary_fuel_before
+
+
+def test_cannot_refuel_specific_campfire_from_far_away():
+    game = Game()
+
+    second_position = next(
+        tile
+        for tile in game.terrain
+        if hex_distance(tile, CAMP_POSITION) > 2
+        and game.terrain[tile] != "water"
+    )
+    second = Campfire(second_position)
+    second.fuel = 3
+    game.campfires[second_position] = second
+
+    game.player = CAMP_POSITION
+    game.inventory.add("wood", 1)
+
+    wood_before = game.inventory.get("wood")
+    turns_before = game.day_turns_left
+
+    assert game.add_firewood_day(second) is False
+
+    assert second.fuel == 3
+    assert game.inventory.get("wood") == wood_before
+    assert game.day_turns_left == turns_before
