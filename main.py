@@ -10,10 +10,14 @@
 """
 
 from __future__ import annotations
-
+import intro
 import math
 import os
 import random
+import sys
+import game_over
+
+
 
 import pygame
 
@@ -1867,6 +1871,12 @@ def main() -> None:
     try:
         pygame.init()
         pygame.display.set_caption("石器時代：荒野求生 v6 - 音效整合")
+        start_game = intro.play_intro()
+    
+    # 如果玩家在動畫按了 ESC，或是直接點視窗右上角的 X
+        if not start_game:
+            pygame.quit()
+            sys.exit()
         screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         clock = pygame.time.Clock()
         fonts = create_fonts()
@@ -1904,6 +1914,7 @@ def main() -> None:
     
     last_phase = game.phase
     fire_loop_playing = False
+    old_bgm_playing = False
     running = True
 
     while running:
@@ -2106,6 +2117,38 @@ def main() -> None:
             audio.stop_sfx("fire")
             fire_loop_playing = False
 
+        # =====================================================
+        # 🌟 遊戲主背景音樂 (old) 同步控制
+        # =====================================================
+        # 使用一個追蹤變數來記錄背景音樂是否正在播放
+        if "old_bgm_playing" not in locals():
+            old_bgm_playing = False
+
+        # 當視圖在遊戲中，且不是遊戲結束狀態時，播放 old 背景音樂
+        should_play_old_bgm = (view == "game" and game.phase != "game_over")
+        
+        # =====================================================
+        # 🌟 遊戲主背景音樂 (old) 同步控制
+        # =====================================================
+        
+        should_play_old_bgm = (view == "game" and game.phase != "game_over")
+        
+        if should_play_old_bgm and not old_bgm_playing:
+            # 自動去 assets/audio 底下尋找副檔名並播放背景音樂
+            for ext in [".mp3", ".ogg", ".wav"]:
+                music_path = os.path.join("assets", "audio", f"old{ext}")
+                if os.path.exists(music_path):
+                    try:
+                        pygame.mixer.music.load(music_path)
+                        pygame.mixer.music.play(-1)  # -1 代表無限循環播放
+                        old_bgm_playing = True
+                        break
+                    except:
+                        pass
+        elif not should_play_old_bgm and old_bgm_playing:
+            pygame.mixer.music.fadeout(1000)  # 音樂平滑淡出
+            old_bgm_playing = False
+
         anim_timer += 1
 
         # =====================================================
@@ -2126,6 +2169,31 @@ def main() -> None:
         if view == "game" and game.floating_icon_type is not None:
             if pygame.time.get_ticks() - game.floating_icon_start_time > 1000:
                 game.floating_icon_type = None
+
+        
+        # =====================================================
+        # 🌟 遊戲結束狀態攔截 (Game Over 整合 - 精準防閃退版)
+        # =====================================================
+        if view == "game" and (game.phase == "game_over" or game.survival.is_dead()):
+            # 確保血量歸零時，把 phase 強制設為 game_over
+            game.phase = "game_over"
+            
+            # 呼叫我們獨立寫好的結束動畫模組
+            action = game_over.play_game_over()
+            
+            if action == "restart":
+                # 玩家選擇重新開始：重置遊戲
+                game = Game()
+                view = "game"
+                context_tile = None
+                drag_path = None
+                recipe_open = False
+                last_phase = game.phase
+                continue
+            else:
+                # 玩家選擇離開遊戲
+                running = False
+                continue
 
         # =====================================================
         # 畫面渲染 (Render Phase)

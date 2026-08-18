@@ -1,0 +1,262 @@
+"""
+石器時代：荒野求生 - 開場故事動畫
+獨立測試檔案
+"""
+
+import pygame
+import os
+import sys
+import math
+
+# =========================================================
+# 基本設定 (與主程式對齊)
+# =========================================================
+SCREEN_WIDTH = 1280
+SCREEN_HEIGHT = 700
+FPS = 60
+
+BLACK = (10, 10, 12)
+TEXT_COLOR = (210, 210, 210)
+GOLD_LIGHT = (255, 204, 108)
+GROUND_COLOR = (28, 35, 30)
+
+# =========================================================
+# 故事文本設定
+# =========================================================
+STORY_PAGES = [
+    [
+        "387 年前，外星文明降臨地球。",
+        "他們沒有直接殺死人類。",
+        "而是摧毀了人類賴以生存的一切："
+    ],
+    [
+        "• 能源系統",
+        "• 通訊系統",
+        "• 工業與農業",
+        "• 城市與科技資料庫"
+    ],
+    [
+        "人類文明在短短幾年內崩潰。",
+        "曾經繁華的城市化為廢墟，先進的機械被掩埋在大地之下。",
+        "人類失去了科技、知識與文明。"
+    ],
+    [
+        "數百年過去。",
+        "森林覆蓋了城市。",
+        "荒野取代了道路。",
+        "人類從高度文明逐漸退回最原始的生活。"
+    ],
+    [
+        "石頭重新成為工具。",
+        "木頭重新成為建材。",
+        "火重新成為生存的希望。"
+    ],
+    [
+        "而人類，也逐漸消失在這片荒野之中。",
+        "直到最後……",
+        "只剩下一個人。"
+    ],
+    [
+        "👤 阿強",
+        "阿強不知道自己為什麼還活著。",
+        "他沒有父母，沒有部落，沒有朋友。"
+    ],
+    [
+        "他醒來時，身邊只有一把破舊的石刀，",
+        "和一本不知道從哪裡來、寫著大大的「I」的生存手冊。"
+    ],
+    [
+        "他不知道這是哪裡。",
+        "不知道自己從哪裡來。",
+        "也不知道這個世界曾經發生過什麼。"
+    ],
+    [
+        "（風聲）",
+        "呼—— 呼——"
+    ]
+]
+
+# =========================================================
+# 輔助函數
+# =========================================================
+def create_fonts():
+    font_path = None
+    for path in (
+        r"C:\Windows\Fonts\msjh.ttc",
+        r"C:\Windows\Fonts\msjhbd.ttc",
+        r"C:\Windows\Fonts\mingliu.ttc",
+    ):
+        if os.path.exists(path):
+            font_path = path
+            break
+
+    if font_path is None:
+        match = pygame.font.match_font("Microsoft JhengHei")
+        if match: font_path = match
+
+    def make(size: int) -> pygame.font.Font:
+        return pygame.font.Font(font_path, size) if font_path else pygame.font.Font(None, size)
+
+    return {"title": make(32), "body": make(24), "small": make(18)}
+
+
+def load_sprite(filename, col, row, width=48, height=48, scale=90):
+    """讀取單一畫格的精靈圖並放大，方便在開場動畫展示"""
+    try:
+        img_path = os.path.join("assets", filename)
+        if not os.path.exists(img_path):
+            return None
+        sheet = pygame.image.load(img_path).convert_alpha()
+        surf = pygame.Surface((width, height), pygame.SRCALPHA)
+        surf.blit(sheet, (0, 0), (col * width, row * height, width, height))
+        return pygame.transform.smoothscale(surf, (scale, scale))
+    except:
+        return None
+
+# =========================================================
+# 主迴圈
+# =========================================================
+def main():
+    pygame.init()
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    pygame.display.set_caption("石器時代：荒野求生 - 開場動畫")
+    clock = pygame.time.Clock()
+    fonts = create_fonts()
+
+    # 狀態管理
+    phase = "story"      # story -> wakeup -> done
+    page_index = 0
+    state_start_time = pygame.time.get_ticks()
+    
+    # 時間設定 (毫秒)
+    FADE_IN_TIME = 1500
+    HOLD_TIME = 3500
+    FADE_OUT_TIME = 1500
+    TOTAL_PAGE_TIME = FADE_IN_TIME + HOLD_TIME + FADE_OUT_TIME
+
+    running = True
+    while running:
+        current_time = pygame.time.get_ticks()
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            # 點擊空白鍵或 Enter 可以跳過動畫
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_ESCAPE):
+                    if phase == "story":
+                        phase = "wakeup"
+                        state_start_time = current_time
+                    elif phase == "wakeup":
+                        phase = "done"
+
+        screen.fill(BLACK)
+
+        # =====================================================
+        # 階段一：文字故事淡入淡出
+        # =====================================================
+        if phase == "story":
+            elapsed = current_time - state_start_time
+            
+            # 計算目前的透明度
+            if elapsed < FADE_IN_TIME:
+                alpha = int((elapsed / FADE_IN_TIME) * 255)
+            elif elapsed < FADE_IN_TIME + HOLD_TIME:
+                alpha = 255
+            elif elapsed < TOTAL_PAGE_TIME:
+                fade_out_elapsed = elapsed - (FADE_IN_TIME + HOLD_TIME)
+                alpha = 255 - int((fade_out_elapsed / FADE_OUT_TIME) * 255)
+            else:
+                # 進入下一頁
+                alpha = 0
+                page_index += 1
+                state_start_time = current_time
+                if page_index >= len(STORY_PAGES):
+                    phase = "wakeup"
+                    state_start_time = current_time
+
+            # 繪製當前頁面的文字
+            if page_index < len(STORY_PAGES):
+                lines = STORY_PAGES[page_index]
+                text_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                
+                start_y = SCREEN_HEIGHT // 2 - (len(lines) * 40) // 2
+                for i, line in enumerate(lines):
+                    # 如果是阿強標題或風聲，給點不同的顏色
+                    color = GOLD_LIGHT if "👤" in line or "風聲" in line else TEXT_COLOR
+                    txt_img = fonts["body"].render(line, True, color)
+                    rect = txt_img.get_rect(center=(SCREEN_WIDTH // 2, start_y + i * 50))
+                    text_surf.blit(txt_img, rect)
+                
+                text_surf.set_alpha(alpha)
+                screen.blit(text_surf, (0, 0))
+
+        # =====================================================
+        # 階段二：阿強甦醒動畫
+        # =====================================================
+        elif phase == "wakeup":
+            elapsed = current_time - state_start_time
+            
+            # 畫出一個簡單的森林黑夜背景 (深色矩形)
+            pygame.draw.rect(screen, GROUND_COLOR, pygame.Rect(0, SCREEN_HEIGHT//2, SCREEN_WIDTH, SCREEN_HEIGHT//2))
+            
+            # 判斷要播哪一張圖
+            row = 9 # 第 10 排 (甦醒系列)
+            if elapsed < 2000:
+                col = 0 # 躺平
+            elif elapsed < 3500:
+                col = 1 # 撐起半身
+            elif elapsed < 5000:
+                col = 2 # 跪坐
+            else:
+                row = 0 # 站起來 (回到 Idle 正面)
+                col = 0
+                
+            # 載入並繪製角色
+            player_img = load_sprite("player_2.png", col, row, scale=120)
+            if player_img:
+                p_rect = player_img.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 20))
+                screen.blit(player_img, p_rect)
+            else:
+                # 防呆備用火柴人
+                pygame.draw.ellipse(screen, (150, 100, 50), pygame.Rect(SCREEN_WIDTH//2-20, SCREEN_HEIGHT//2-40, 40, 80))
+
+            # 站起來後顯示台詞
+            if elapsed >= 5500:
+                alpha = min(255, int(((elapsed - 5500) / 1000) * 255))
+                dialogue = fonts["body"].render("「……這是哪裡？」", True, TEXT_COLOR)
+                dialogue.set_alpha(alpha)
+                screen.blit(dialogue, dialogue.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 80)))
+                
+            if elapsed >= 7500:
+                alpha2 = min(255, int(((elapsed - 7500) / 1000) * 255))
+                dialogue2 = fonts["body"].render("「不管怎樣……我必須活下去。」", True, GOLD_LIGHT)
+                dialogue2.set_alpha(alpha2)
+                screen.blit(dialogue2, dialogue2.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 120)))
+
+            if elapsed >= 9500:
+                phase = "done"
+
+        # =====================================================
+        # 階段三：結束動畫，準備進入遊戲
+        # =====================================================
+        elif phase == "done":
+            screen.fill(BLACK)
+            txt = fonts["title"].render("按下 [Enter] 開始荒野求生", True, GOLD_LIGHT)
+            screen.blit(txt, txt.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2)))
+            
+            if current_time % 1000 < 500: # 閃爍效果
+                pygame.draw.rect(screen, BLACK, txt.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2)))
+
+        # 右下角提示
+        skip_txt = fonts["small"].render("按 [Space] 跳過", True, (80, 80, 80))
+        screen.blit(skip_txt, (SCREEN_WIDTH - 150, SCREEN_HEIGHT - 40))
+
+        pygame.display.flip()
+        clock.tick(FPS)
+
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
