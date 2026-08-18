@@ -260,7 +260,15 @@ class Game:
         self.inventory = Inventory()
         self.survival = SurvivalStats()
         self.buildings = BuildingManager()
-        self.campfire = Campfire(CAMP_POSITION)
+        primary_campfire = Campfire(CAMP_POSITION)
+
+        # 所有營火以位置為 key 儲存。
+        self.campfires: dict[tuple[int, int], Campfire] = {
+            CAMP_POSITION: primary_campfire
+        }
+
+        # 保留舊的 self.campfire，避免現有功能受到影響。
+        self.campfire = primary_campfire
 
         self.player = CAMP_POSITION
         self.selected_tile = CAMP_POSITION
@@ -296,6 +304,18 @@ class Game:
             "白天共有 20 回合。右鍵點地圖格開始行動。",
         ]
 
+    def campfire_at(self, tile: tuple[int, int]) -> Campfire | None:
+        """Return the campfire at tile, if one exists."""
+        return self.campfires.get(tile)
+
+
+    def lit_campfires(self) -> list[Campfire]:
+        """Return all currently lit campfires."""
+        return [
+            campfire
+            for campfire in self.campfires.values()
+            if campfire.lit
+        ]
     def reveal_around(self, tile: tuple[int, int]) -> None:
         """探索目前格以及周圍相鄰的六角格。"""
         if tile in self.terrain:
