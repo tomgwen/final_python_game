@@ -264,8 +264,8 @@ class Game:
 
         self.player = CAMP_POSITION
         self.selected_tile = CAMP_POSITION
-        self.discovered = {CAMP_POSITION}
-        self.discovered.update(neighbors(CAMP_POSITION))
+        self.discovered: set[tuple[int, int]] = set()
+        self.reveal_around(CAMP_POSITION)
 
         self.day = 1
         self.phase = "day"
@@ -296,6 +296,15 @@ class Game:
             "白天共有 20 回合。右鍵點地圖格開始行動。",
         ]
 
+    def reveal_around(self, tile: tuple[int, int]) -> None:
+        """探索目前格以及周圍相鄰的六角格。"""
+        if tile in self.terrain:
+            self.discovered.add(tile)
+
+        for neighbor in neighbors(tile):
+            if neighbor in self.terrain:
+                self.discovered.add(neighbor)
+
     def log(self, message: str) -> None:
         self.logs.append(message)
         self.logs = self.logs[-7:]
@@ -324,8 +333,7 @@ class Game:
             return False
         self.player = target
         self.selected_tile = target
-        self.discovered.add(target)
-        self.discovered.update(neighbors(target))
+        self.reveal_around(target)
         self.log(f"移動到 {target}。")
         self.spend_day_turn()
         return True
@@ -347,6 +355,7 @@ class Game:
             return False
         self.player = target
         self.selected_tile = target
+        self.reveal_around(target)
         self.log(f"你在夜色中移動到 {target}。")
         self.advance_night_turn()
         return True
@@ -874,8 +883,7 @@ class Game:
         self.night_turns_left = 0
         self.player = CAMP_POSITION
         self.selected_tile = CAMP_POSITION
-        self.discovered.add(CAMP_POSITION)
-        self.discovered.update(neighbors(CAMP_POSITION))
+        self.reveal_around(CAMP_POSITION)
 
         # 清除任何殘留動畫
         self.attack_animating = False
@@ -1546,8 +1554,6 @@ def draw_game(
             center = axial_to_pixel(tile)
             discovered = tile in game.discovered
             
-            if game.phase == "night":
-                discovered = True
                 
             fill = terrain_color(game.terrain[tile]) if discovered else FOG
             points = hex_points(center)
