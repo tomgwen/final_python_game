@@ -736,9 +736,6 @@ class Game:
     def attack_enemy_at(self, tile: tuple[int, int]) -> bool:
         if self.phase != "night":
             return False
-        if not self.is_near_campfire(self.campfire):
-            self.log("你必須靠近營火才能處理營火。")
-            return False
         if self.attack_animating:
             self.log("攻擊動作尚未完成。")
             return False
@@ -1776,12 +1773,30 @@ def draw_game(
         tint.fill((5, 10, 27, 72))
         screen.blit(tint, MAP_PANEL.topleft)
 
-        if game.campfire.lit:
-            center = axial_to_pixel(CAMP_POSITION)
-            glow = pygame.Surface((300, 300), pygame.SRCALPHA)
-            pygame.draw.circle(glow, (255, 153, 50, 38), (150, 150), 125)
-            pygame.draw.circle(glow, (255, 195, 78, 20), (150, 150), 148)
-            screen.blit(glow, (center[0] - 150, center[1] - 150))
+            # 將所有點燃營火半徑 4 內的六角格標示為安全區。
+        safe_overlay = pygame.Surface(
+            (SCREEN_WIDTH, SCREEN_HEIGHT),
+            pygame.SRCALPHA,
+        )
+
+        for tile in game.terrain:
+            if game.is_in_lit_campfire_range(tile):
+                center = axial_to_pixel(tile)
+
+                pygame.draw.polygon(
+                    safe_overlay,
+                    (255, 185, 72, 32),
+                    hex_points(center),
+                )
+
+                pygame.draw.polygon(
+                    safe_overlay,
+                    (255, 205, 105, 70),
+                    hex_points(center),
+                    1,
+                )
+
+        screen.blit(safe_overlay, (0, 0))
 
     # =====================================================
     # 建築物與營火
@@ -2298,7 +2313,11 @@ def main() -> None:
                 fire_loop_playing = False
             last_phase = game.phase
 
-        should_play_fire = (view == "game" and game.phase == "night" and game.campfire.lit)
+        should_play_fire = (
+            view == "game"
+            and game.phase == "night"
+            and bool(game.lit_campfires())
+        )
         if should_play_fire and not fire_loop_playing:
             fire_loop_playing = audio.play_sfx("fire", loops=-1)
         elif not should_play_fire and fire_loop_playing:

@@ -3,6 +3,7 @@ from main import Game, CAMP_POSITION, hex_distance
 from campfire import Campfire
 from enemy import create_enemy
 from constants import ENEMY_WOLF, ENEMY_BOAR
+from main import Game, CAMP_POSITION, hex_distance, neighbors
 
 def test_game_starts_with_one_primary_campfire():
     game = Game()
@@ -361,3 +362,29 @@ def test_wolf_can_approach_when_campfire_is_extinguished():
 
     assert moved is True
     assert hex_distance(wolf.position, CAMP_POSITION) == 4
+def test_player_can_attack_enemy_away_from_primary_campfire():
+    game = Game()
+    game.phase = "night"
+
+    player_tile = next(
+        tile
+        for tile in game.terrain
+        if hex_distance(tile, CAMP_POSITION) > 4
+        and game.terrain[tile] != "water"
+    )
+
+    enemy_tile = next(
+        tile
+        for tile in neighbors(player_tile)
+        if tile in game.terrain
+        and game.terrain[tile] != "water"
+    )
+
+    game.player = player_tile
+
+    enemy = create_enemy(ENEMY_WOLF, enemy_tile)
+    game.enemies = [enemy]
+
+    assert game.attack_enemy_at(enemy_tile) is True
+    assert game.attack_enemy is enemy
+    assert game.attack_animating is True
