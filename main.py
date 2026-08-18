@@ -239,7 +239,7 @@ def create_world() -> tuple[dict, dict]:
                 kind = "grass"
                 
             terrain[position] = kind
-            resources[position] = 0 if kind == "water" else rng.randint(1, 3)
+            resources[position] = 0 if kind == "water" else 6
             
     return terrain, resources
 
