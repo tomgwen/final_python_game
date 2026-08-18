@@ -571,8 +571,7 @@ class Game:
     def start_night(self) -> None:
         if self.phase != "day":
             return
-        self.player = CAMP_POSITION
-        self.selected_tile = CAMP_POSITION
+        self.selected_tile = self.player
         self.survival.apply_daily_hunger()
         
         if self.survival.is_dead():
