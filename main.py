@@ -851,9 +851,13 @@ class Game:
         if self.phase != "night":
             return
             
-        self.campfire.consume(1)
-        if not self.campfire.lit:
-            self.log("營火熄滅，狼群不再害怕靠近營地！")
+        for campfire in self.campfires.values():
+            was_lit = campfire.lit
+
+            campfire.consume(1)
+
+            if was_lit and not campfire.lit:
+                self.log(f"{campfire.position} 的營火熄滅了。")
             
         if self.survival.is_dead():
             self.phase = "game_over"

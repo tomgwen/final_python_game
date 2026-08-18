@@ -190,3 +190,64 @@ def test_cannot_refuel_specific_campfire_from_far_away():
     assert second.fuel == 3
     assert game.inventory.get("wood") == wood_before
     assert game.day_turns_left == turns_before
+def test_all_campfires_consume_fuel_each_night_turn():
+    game = Game()
+
+    second_position = next(
+        tile
+        for tile in game.terrain
+        if tile != CAMP_POSITION
+        and game.terrain[tile] != "water"
+    )
+
+    second = Campfire(second_position)
+    game.campfires[second_position] = second
+
+    game.phase = "night"
+    game.night_turns_left = 20
+
+    primary_before = game.campfire.fuel
+    second_before = second.fuel
+
+    # 避免測試因為沒有敵人而提前結束夜晚。
+    game.enemy_phase = lambda: None
+    game.alive_enemies = lambda: [object()]
+
+    game.advance_night_turn()
+
+    assert game.campfire.fuel == primary_before - 1
+    assert second.fuel == second_before - 1
+
+
+def test_one_campfire_can_extinguish_without_affecting_another():
+    game = Game()
+
+    second_position = next(
+        tile
+        for tile in game.terrain
+        if tile != CAMP_POSITION
+        and game.terrain[tile] != "water"
+    )
+
+    second = Campfire(second_position)
+    game.campfires[second_position] = second
+
+    game.campfire.fuel = 1
+    game.campfire.lit = True
+
+    second.fuel = 3
+    second.lit = True
+
+    game.phase = "night"
+    game.night_turns_left = 20
+
+    game.enemy_phase = lambda: None
+    game.alive_enemies = lambda: [object()]
+
+    game.advance_night_turn()
+
+    assert game.campfire.fuel == 0
+    assert game.campfire.lit is False
+
+    assert second.fuel == 2
+    assert second.lit is True
