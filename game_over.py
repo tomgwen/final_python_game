@@ -92,7 +92,7 @@ def play_adventure_bgm():
 # =========================================================
 # 主要播放函數
 # =========================================================
-def play_game_over():
+def play_game_over(death_reason: str | None = None):
     pygame.init()
     pygame.mixer.init() 
     
@@ -175,7 +175,16 @@ def play_game_over():
         if elapsed > 1000:
             sub_alpha = min(255, int(((elapsed - 1000) / 1000) * 255))
             
-            desc_txt = fonts["body"].render("阿強倒在了荒野之中，生命的火熄滅了……", True, TEXT_COLOR)
+            description = (
+                death_reason
+                or "阿強倒在了荒野之中，生命的火熄滅了……"
+            )
+
+            desc_txt = fonts["body"].render(
+                description,
+                True,
+                TEXT_COLOR,
+            )
             desc_rect = desc_txt.get_rect(center=(SCREEN_WIDTH // 2, CHAR_Y + 95))
             
             prompt_txt = fonts["small"].render("按下 [Enter] 或 [滑鼠左鍵] 重新開始 | [Esc] 離開", True, GOLD_LIGHT)

@@ -17,6 +17,7 @@ import random
 
 import intro
 import game_over
+import day_transition
 
 import pygame
 
@@ -52,6 +53,10 @@ from survival import SurvivalStats
 # =========================================================
 DAY_TURNS = 20
 NIGHT_TURNS = 20
+DEATH_REASON_WOLF = "你遭到狼群攻擊而死亡。"
+DEATH_REASON_BOAR = "你遭到野豬攻擊而死亡。"
+DEATH_REASON_HUNGER = "你因飢餓與傷勢倒下了。"
+DEATH_REASON_COLD = "你遠離營火，在寒冷與黑暗中倒下了。"
 
 HEX_SIZE = 30
 MAP_ORIGIN_X = 62
@@ -282,6 +287,8 @@ class Game:
         self.phase = "day"
         self.day_turns_left = DAY_TURNS
         self.night_turns_left = 0
+        self.death_reason: str | None = None
+        self.completed_day: int | None = None
 
         self.has_spear = False
         self.has_axe = False
@@ -358,6 +365,7 @@ class Game:
         if self.survival.is_dead():
             self.phase = "game_over"
             self.log("你因飢餓與虛弱倒下了。")
+            self.death_reason = DEATH_REASON_HUNGER
             return False
 
         return True
@@ -875,6 +883,8 @@ class Game:
         if not self.is_in_lit_campfire_range(self.player):
             self.survival.health = max(0, self.survival.health - 1)
             self.log("你遠離營火，在黑暗與寒冷中失去 1 HP。")
+            if self.survival.is_dead():
+                self.death_reason = DEATH_REASON_COLD
 
         # 所有位於任一點燃營火範圍內的敵人受到 2 點傷害。
         for enemy in list(self.alive_enemies()):
@@ -1012,20 +1022,32 @@ class Game:
     def enemy_attack_player(self, enemy) -> None:
         health_lost = self.survival.take_damage(enemy.damage)
         name = "野豬" if enemy.enemy_type == ENEMY_BOAR else "狼"
+
         if enemy.position == self.player:
             self.log(f"{name}撲向你！生命損失 {health_lost}。")
         else:
             self.log(f"{name}突破營地防線！生命損失 {health_lost}。")
 
+        if self.survival.is_dead():
+            if enemy.enemy_type == ENEMY_WOLF:
+                self.death_reason = DEATH_REASON_WOLF
+            elif enemy.enemy_type == ENEMY_BOAR:
+                self.death_reason = DEATH_REASON_BOAR
+
     def finish_night(self) -> None:
+        completed_day = self.day
+
         self.enemies = []
         self.day += 1
+        self.completed_day = completed_day
         self.regenerate_resources()
         self.phase = "day"
         self.day_turns_left = DAY_TURNS
         self.night_turns_left = 0
+
         self.selected_tile = self.player
         self.reveal_around(self.player)
+
         # 清除任何殘留動畫
         self.attack_animating = False
         self.attack_anim_start_time = 0
@@ -2347,6 +2369,13 @@ def main() -> None:
                             game.move_night_to(tile)
                 context_tile = None
                 continue
+        if view == "game" and game.completed_day is not None:
+            completed_day = game.completed_day
+            game.completed_day = None
+
+            day_transition.play_day_survived(completed_day)
+
+            pygame.display.set_caption("石器時代：荒野求生 v6 - 音效整合")
 
         # =====================================================
         # 音效同步
@@ -2390,6 +2419,30 @@ def main() -> None:
         elif not should_play_main_bgm and main_bgm_playing:
             pygame.mixer.music.fadeout(1000)
             main_bgm_playing = False
+
+        if view == "game" and game.phase == "game_over":
+            audio.stop_all()
+            fire_loop_playing = False
+            main_bgm_playing = False
+
+            action = game_over.play_game_over(game.death_reason)
+
+            if action == "restart":
+                game = Game()
+                context_tile = None
+                dragging_player = False
+                drag_path = None
+                recipe_open = False
+                last_phase = game.phase
+
+                pygame.display.set_caption(
+                    "石器時代：荒野求生 v6 - 音效整合"
+                )
+
+                continue
+
+            running = False
+            continue
 
         anim_timer += 1
 
