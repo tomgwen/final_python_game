@@ -345,10 +345,31 @@ class Game:
     # =====================================================
     # 白天
     # =====================================================
+    def apply_hunger_turn_effect(self) -> bool:
+        """Apply hunger-based health change once for the current turn."""
+        health_change = self.survival.apply_hunger_health_effect()
+
+        if health_change > 0:
+            self.log(f"飢餓度低，恢復 {health_change} HP。")
+
+        elif health_change < 0:
+            self.log(f"飢餓造成 {-health_change} 點生命損失。")
+
+        if self.survival.is_dead():
+            self.phase = "game_over"
+            self.log("你因飢餓與虛弱倒下了。")
+            return False
+
+        return True
     def spend_day_turn(self) -> None:
         if self.phase != "day":
             return
+
         self.day_turns_left = max(0, self.day_turns_left - 1)
+
+        if not self.apply_hunger_turn_effect():
+            return
+
         if self.day_turns_left == 0:
             self.log("白天 20 回合已結束，夜幕降臨！")
             self.start_night()
@@ -870,13 +891,29 @@ class Game:
     def advance_night_turn(self) -> None:
         if self.phase != "night":
             return
+
+        # 夜晚環境 / 營火效果
         self.apply_campfire_night_effects()
+
+        # 如果已經因夜晚環境傷害死亡，就不要再繼續回合。
+        if self.survival.is_dead():
+            self.phase = "game_over"
+            self.log("你倒在了黑暗與寒冷中。")
+            return
+
+        # 每個夜晚回合套用一次飢餓造成的回血 / 扣血。
+        if not self.apply_hunger_turn_effect():
+            return
+
         self.night_turns_left = max(0, self.night_turns_left - 1)
+
+        # 敵人行動
         self.enemy_phase()
-        
+
         if self.phase != "night":
             return
-            
+
+        # 所有營火各消耗 1 點燃料
         for campfire in self.campfires.values():
             was_lit = campfire.lit
 
@@ -884,17 +921,17 @@ class Game:
 
             if was_lit and not campfire.lit:
                 self.log(f"{campfire.position} 的營火熄滅了。")
-            
+
         if self.survival.is_dead():
             self.phase = "game_over"
             self.log("你倒在了營地中。")
             return
-            
+
         if not self.alive_enemies():
             self.log("所有敵人都被擊退，黎明提早到來。")
             self.finish_night()
             return
-            
+
         if self.night_turns_left == 0:
             self.log("夜晚 20 回合結束，剩餘敵人撤退。")
             self.finish_night()
