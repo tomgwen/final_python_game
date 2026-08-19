@@ -272,10 +272,10 @@ class Game:
 
         # 保留舊的 self.campfire，避免現有功能受到影響。
         self.campfire = primary_campfire
+        self.discovered: set[tuple[int, int]] = set()
 
         self.player = CAMP_POSITION
         self.selected_tile = CAMP_POSITION
-        self.discovered: set[tuple[int, int]] = set()
         self.reveal_around(CAMP_POSITION)
 
         self.day = 1
@@ -1024,10 +1024,8 @@ class Game:
         self.phase = "day"
         self.day_turns_left = DAY_TURNS
         self.night_turns_left = 0
-        self.player = CAMP_POSITION
-        self.selected_tile = CAMP_POSITION
-        self.reveal_around(CAMP_POSITION)
-
+        self.selected_tile = self.player
+        self.reveal_around(self.player)
         # 清除任何殘留動畫
         self.attack_animating = False
         self.attack_anim_start_time = 0
