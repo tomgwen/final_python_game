@@ -10,7 +10,7 @@
 """
 
 from __future__ import annotations
-
+from viewport_culling import visible_world_tiles
 import math
 import os
 import random
@@ -1973,34 +1973,38 @@ def draw_game(
     # =====================================================
     # 地圖
     # =====================================================
-    for r in range(MAP_ROWS):
-        for q in range(MAP_COLS):
-            tile = (q, r)
-            center = axial_to_pixel(tile, camera)
-            discovered = tile in game.discovered
+    visible_tiles = visible_world_tiles(
+        game.terrain.keys(),
+        camera,
+        viewport,
+        hex_size=HEX_SIZE,
+        origin=(MAP_ORIGIN_X, MAP_ORIGIN_Y),
+    )
+
+    for tile in visible_tiles:
+        center = axial_to_pixel(tile, camera)
+        discovered = tile in game.discovered
             
                 
-            fill = terrain_color(game.terrain[tile]) if discovered else FOG
-            points = hex_points(center)
+        fill = terrain_color(game.terrain[tile]) if discovered else FOG
+        points = hex_points(center)
+        pygame.draw.polygon(screen, fill, points)
+        pygame.draw.polygon(screen, (57, 61, 64), points, 1)
+        if discovered:
+            # 判斷這格的資源是不是被採光了
+            is_depleted = game.is_tile_depleted(tile)
             
-            pygame.draw.polygon(screen, fill, points)
-            pygame.draw.polygon(screen, (57, 61, 64), points, 1)
+            # 將枯竭狀態傳入
+            draw_terrain_detail(screen, game.terrain[tile], center, tile, visual_mgr, is_depleted)
             
-            if discovered:
-                # 判斷這格的資源是不是被採光了
-                is_depleted = game.is_tile_depleted(tile)
+            amount = game.resources.get(tile, 0)
+            if amount > 0:
+                text(screen, fonts["tiny"], amount, center[0] + 16, center[1] + 12, (238, 220, 150))
                 
-                # 將枯竭狀態傳入
-                draw_terrain_detail(screen, game.terrain[tile], center, tile, visual_mgr, is_depleted)
-                
-                amount = game.resources.get(tile, 0)
-                if amount > 0:
-                    text(screen, fonts["tiny"], amount, center[0] + 16, center[1] + 12, (238, 220, 150))
-                    
-            if tile == hover_tile:
-                pygame.draw.polygon(screen, (221, 221, 205), points, 2)
-            if tile == game.selected_tile:
-                pygame.draw.polygon(screen, GOLD_LIGHT, points, 3)
+        if tile == hover_tile:
+            pygame.draw.polygon(screen, (221, 221, 205), points, 2)
+        if tile == game.selected_tile:
+            pygame.draw.polygon(screen, GOLD_LIGHT, points, 3)
 
     # =====================================================
     # 拖曳路徑
@@ -2034,7 +2038,7 @@ def draw_game(
             pygame.SRCALPHA,
         )
 
-        for tile in game.terrain:
+        for tile in visible_tiles:
             if game.is_in_lit_campfire_range(tile):
                 center = axial_to_pixel(tile, camera)
 
