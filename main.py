@@ -20,6 +20,11 @@ import game_over
 import day_transition
 
 import pygame
+from camera import Camera
+from hex_coordinates import (
+    axial_to_world_pixel,
+    world_to_axial_nearest,
+)
 
 from visuals import VisualManager
 from audio_manager import audio
@@ -191,11 +196,20 @@ def hex_distance(a: tuple[int, int], b: tuple[int, int]) -> int:
         + abs(r1 - r2)
     ) // 2
 
-def axial_to_pixel(position: tuple[int, int]) -> tuple[int, int]:
-    q, r = position
-    x = MAP_ORIGIN_X + HEX_SIZE * math.sqrt(3) * (q + r / 2)
-    y = MAP_ORIGIN_Y + HEX_SIZE * 1.5 * r
-    return int(x), int(y)
+def axial_to_pixel(
+    position: tuple[int, int],
+    camera: Camera | None = None,
+) -> tuple[int, int]:
+    world_pos = axial_to_world_pixel(
+        position,
+        HEX_SIZE,
+        (MAP_ORIGIN_X, MAP_ORIGIN_Y),
+    )
+
+    if camera is not None:
+        world_pos = camera.world_to_screen(world_pos)
+
+    return int(world_pos[0]), int(world_pos[1])
 
 def hex_points(center: tuple[int, int]) -> list[tuple[int, int]]:
     cx, cy = center
@@ -207,20 +221,28 @@ def hex_points(center: tuple[int, int]) -> list[tuple[int, int]]:
         for i in range(6)
     ]
 
-def tile_at_pixel(mouse_pos: tuple[int, int]) -> tuple[int, int] | None:
-    if not MAP_PANEL.collidepoint(mouse_pos):
+def tile_at_pixel(
+    mouse_pos: tuple[int, int],
+    camera: Camera | None = None,
+    viewport_rect: pygame.Rect | None = None,
+) -> tuple[int, int] | None:
+    active_viewport = viewport_rect if viewport_rect is not None else MAP_PANEL
+
+    if not active_viewport.collidepoint(mouse_pos):
         return None
-    best_tile = None
-    best_distance = HEX_SIZE * 1.05
-    for r in range(MAP_ROWS):
-        for q in range(MAP_COLS):
-            tile = (q, r)
-            cx, cy = axial_to_pixel(tile)
-            distance = math.hypot(mouse_pos[0] - cx, mouse_pos[1] - cy)
-            if distance < best_distance:
-                best_distance = distance
-                best_tile = tile
-    return best_tile
+
+    world_pos: tuple[float, float] = mouse_pos
+
+    if camera is not None:
+        world_pos = camera.screen_to_world(mouse_pos)
+
+    return world_to_axial_nearest(
+        world_pos,
+        HEX_SIZE,
+        MAP_COLS,
+        MAP_ROWS,
+        (MAP_ORIGIN_X, MAP_ORIGIN_Y),
+    )
 
 # =========================================================
 # 世界生成
