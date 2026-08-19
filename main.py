@@ -733,35 +733,67 @@ class Game:
         
         wolves = sum(1 for enemy in self.enemies if enemy.enemy_type == ENEMY_WOLF)
         boars = sum(1 for enemy in self.enemies if enemy.enemy_type == ENEMY_BOAR)
-        self.log(f"夜晚開始：{wolves} 隻狼、{boars} 隻野豬從地圖邊緣出現！")
+        self.log(f"夜晚開始：{wolves} 隻狼、{boars} 隻野豬從營地外圍的荒野中出現！")
 
     def spawn_enemies(self) -> None:
         wolf_count = min(3 + self.day, 7)
         boar_count = 0 if self.day < 2 else min(1 + (self.day - 2) // 2, 3)
         total = wolf_count + boar_count
-        candidates = []
+
+        spawn_min_distance = 6
+        spawn_max_distance = 9
+
+        candidates: list[tuple[int, int]] = []
+
         for r in range(MAP_ROWS):
             for q in range(MAP_COLS):
                 tile = (q, r)
-                if q in (0, MAP_COLS - 1) or r in (0, MAP_ROWS - 1):
-                    if tile != CAMP_POSITION and self.terrain[tile] != "water":
-                        candidates.append(tile)
-                        
+
+                if tile == CAMP_POSITION:
+                    continue
+
+                if self.terrain[tile] == "water":
+                    continue
+
+                distance = hex_distance(tile, CAMP_POSITION)
+
+                if spawn_min_distance <= distance <= spawn_max_distance:
+                    candidates.append(tile)
+
         rng = random.Random(1000 + self.day)
         rng.shuffle(candidates)
-        
+
+        if not candidates:
+            self.enemies = []
+            return
+
         if len(candidates) < total:
-            positions = [rng.choice(candidates) for _ in range(total)]
+            positions = [
+                rng.choice(candidates)
+                for _ in range(total)
+            ]
         else:
             positions = candidates[:total]
-            
+
         self.enemies = []
         index = 0
+
         for _ in range(wolf_count):
-            self.enemies.append(create_enemy(ENEMY_WOLF, positions[index]))
+            self.enemies.append(
+                create_enemy(
+                    ENEMY_WOLF,
+                    positions[index],
+                )
+            )
             index += 1
+
         for _ in range(boar_count):
-            self.enemies.append(create_enemy(ENEMY_BOAR, positions[index]))
+            self.enemies.append(
+                create_enemy(
+                    ENEMY_BOAR,
+                    positions[index],
+                )
+            )
             index += 1
 
     def alive_enemies(self):
