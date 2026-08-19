@@ -999,12 +999,18 @@ class Game:
         if self.night_turns_left == 0:
             self.log("夜晚 20 回合結束，剩餘敵人撤退。")
             self.finish_night()
+    def enemy_target(self, enemy) -> tuple[int, int]:
+        player_detection_radius = 5
 
+        if hex_distance(enemy.position, self.player) <= player_detection_radius:
+            return self.player
+
+        return CAMP_POSITION
     def enemy_phase(self) -> None:
         for enemy in list(self.alive_enemies()):
             if not enemy.alive:
                 continue
-            if enemy.position == self.player or enemy.position == CAMP_POSITION:
+            if enemy.position == self.player:
                 self.enemy_attack_player(enemy)
                 if self.survival.is_dead():
                     return
@@ -1014,7 +1020,7 @@ class Game:
                 keep_moving = self.enemy_step(enemy)
                 if not enemy.alive:
                     break
-                if enemy.position == self.player or enemy.position == CAMP_POSITION:
+                if enemy.position == self.player:
                     self.enemy_attack_player(enemy)
                     break
                 if not keep_moving:
@@ -1024,12 +1030,23 @@ class Game:
                 return
 
     def enemy_step(self, enemy) -> bool:
-        current_distance = hex_distance(enemy.position, CAMP_POSITION)
+        target_position = self.enemy_target(enemy)
+
+        if enemy.position == target_position:
+            return False
+
+        current_distance = hex_distance(
+            enemy.position,
+            target_position,
+        )
         candidates = []
         for candidate in neighbors(enemy.position):
             if self.terrain[candidate] == "water":
                 continue
-            candidate_distance = hex_distance(candidate, CAMP_POSITION)
+            candidate_distance = hex_distance(
+                candidate,
+                target_position,
+            )
             if candidate_distance >= current_distance:
                 continue
             if (
@@ -1042,7 +1059,13 @@ class Game:
         if not candidates:
             return False
             
-        candidates.sort(key=lambda tile: (hex_distance(tile, CAMP_POSITION), tile[0], tile[1]))
+        candidates.sort(
+            key=lambda tile: (
+                hex_distance(tile, target_position),
+                tile[0],
+                tile[1],
+            )
+        )
         target = candidates[0]
         
         building = self.buildings.get_building(target)
