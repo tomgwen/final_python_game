@@ -5,8 +5,8 @@ from recipe_catalog import (
 )
 
 
-def test_catalog_contains_expected_five_recipes():
-    assert len(RECIPE_CATALOG) == 5
+def test_catalog_contains_expected_six_recipes():
+    assert len(RECIPE_CATALOG) == 6
 
     ids = {
         recipe["id"]
@@ -17,6 +17,7 @@ def test_catalog_contains_expected_five_recipes():
         "spear",
         "axe",
         "armor",
+        "pickaxe",
         "wall",
         "trap",
     }
@@ -97,6 +98,7 @@ def test_get_equipment_recipes():
         "spear",
         "axe",
         "armor",
+        "pickaxe",
     ]
 
 
