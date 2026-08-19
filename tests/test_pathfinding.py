@@ -1,3 +1,4 @@
+from constants import MAP_COLS, MAP_ROWS
 from pathfinding import (
     find_hex_path,
     get_hex_neighbors,
@@ -7,12 +8,12 @@ from pathfinding import (
 
 def test_valid_position():
     assert is_valid_position((0, 0)) is True
-    assert is_valid_position((10, 7)) is True
+    assert is_valid_position((MAP_COLS - 1, MAP_ROWS - 1)) is True
 
     assert is_valid_position((-1, 0)) is False
     assert is_valid_position((0, -1)) is False
-    assert is_valid_position((11, 0)) is False
-    assert is_valid_position((0, 8)) is False
+    assert is_valid_position((MAP_COLS, 0)) is False
+    assert is_valid_position((0, MAP_ROWS)) is False
 
 
 def test_hex_neighbors_at_center():
