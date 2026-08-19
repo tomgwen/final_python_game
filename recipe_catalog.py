@@ -42,6 +42,14 @@ RECIPE_CATALOG = [
         "effect": "增加 25 點護甲，護甲最高 50",
     },
     {
+        "id": "pickaxe",
+        "name": "石鎬",
+        "category": "裝備",
+        "cost": {"wood": 2, "stone": 2},
+        "cost_text": "木材 x2、石頭 x2",
+        "effect": "採集石頭時，每次最多獲得 2 石頭",
+    },
+    {
         "id": "wall",
         "name": "木牆",
         "category": "建造",

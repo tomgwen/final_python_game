@@ -18,6 +18,8 @@ import random
 import intro
 import game_over
 import day_transition
+from display_manager import DisplayManager
+from floating_notifications import FloatingNotificationManager
 
 import pygame
 from camera import Camera
@@ -33,6 +35,7 @@ from campfire import Campfire
 from constants import (
     BUILD_TRAP,
     BUILD_WALL,
+    CAMPFIRE_MAX_FUEL,
     CAMP_POSITION,
     ENEMY_BOAR,
     ENEMY_WOLF,
@@ -52,6 +55,8 @@ from inventory import Inventory
 from pathfinding import find_hex_path
 from recipe_catalog import RECIPE_CATALOG
 from survival import SurvivalStats
+from tutorial_controller import TutorialController
+from ui_layout import get_game_viewport, get_right_hud_rect
 
 # =========================================================
 # 基本設定
@@ -226,10 +231,32 @@ def tile_at_pixel(
     camera: Camera | None = None,
     viewport_rect: pygame.Rect | None = None,
 ) -> tuple[int, int] | None:
-    active_viewport = viewport_rect if viewport_rect is not None else MAP_PANEL
+    if viewport_rect is not None:
+        active_viewport = viewport_rect
+    else:
+        surface = pygame.display.get_surface()
+        active_viewport = (
+            get_game_viewport(surface)
+            if surface is not None
+            else MAP_PANEL
+        )
 
     if not active_viewport.collidepoint(mouse_pos):
         return None
+
+    world_pos: tuple[float, float] = mouse_pos
+
+    if camera is not None:
+        world_pos = camera.screen_to_world(mouse_pos)
+
+    return world_to_axial_nearest(
+        world_pos,
+        HEX_SIZE,
+        MAP_COLS,
+        MAP_ROWS,
+        (MAP_ORIGIN_X, MAP_ORIGIN_Y),
+    )
+    return None
 
     world_pos: tuple[float, float] = mouse_pos
 
@@ -314,6 +341,7 @@ class Game:
 
         self.has_spear = False
         self.has_axe = False
+        self.has_pickaxe = False
         self.enemies = []
 
         # =====================================================
@@ -545,7 +573,11 @@ class Game:
             return False
             
         resource = self.resource_type_at(tile)
-        amount = 2 if resource == "wood" and self.has_axe else 1
+        amount = 1
+        if resource == "wood" and self.has_axe:
+            amount = 2
+        elif resource == "stone" and self.has_pickaxe:
+            amount = 2
         amount = min(amount, self.resources[tile])
         
         self.resources[tile] -= amount
@@ -660,6 +692,10 @@ class Game:
             self.log("你必須在營火一格範圍內才能補充或重新點燃營火。")
             return False
 
+        if target_campfire.lit and target_campfire.fuel >= CAMPFIRE_MAX_FUEL:
+            self.log("營火燃料已滿。")
+            return False
+
         success = (
             target_campfire.add_fuel(self.inventory)
             if target_campfire.lit
@@ -670,7 +706,7 @@ class Game:
             self.log("需要木材才能補充或重新點燃營火。")
             return False
 
-        self.log(f"營火燃料目前為 {target_campfire.fuel}/12。")
+        self.log(f"營火燃料目前為 {target_campfire.fuel}/{CAMPFIRE_MAX_FUEL}。")
         self.spend_day_turn()
         return True
 
@@ -699,6 +735,20 @@ class Game:
             return False
         self.has_axe = True
         self.log("製作石斧成功！採木效率提升。")
+        self.spend_day_turn()
+        return True
+
+    def craft_pickaxe(self) -> bool:
+        if self.phase != "day":
+            return False
+        if self.has_pickaxe:
+            self.log("你已經擁有石鎬。")
+            return False
+        if not self.inventory.spend({"wood": 2, "stone": 2}):
+            self.log("石鎬需要 2 木材 + 2 石頭。")
+            return False
+        self.has_pickaxe = True
+        self.log("製作石鎬成功！採石效率提升。")
         self.spend_day_turn()
         return True
 
@@ -906,6 +956,10 @@ class Game:
             self.log("你必須在營火一格範圍內才能補充或重新點燃營火。")
             return False
 
+        if target_campfire.lit and target_campfire.fuel >= CAMPFIRE_MAX_FUEL:
+            self.log("營火燃料已滿。")
+            return False
+
         success = (
             target_campfire.add_fuel(self.inventory)
             if target_campfire.lit
@@ -916,7 +970,7 @@ class Game:
             self.log("沒有木材，無法處理營火。")
             return False
 
-        self.log(f"你處理了營火，目前燃料 {target_campfire.fuel}/12。")
+        self.log(f"你處理了營火，目前燃料 {target_campfire.fuel}/{CAMPFIRE_MAX_FUEL}。")
         self.advance_night_turn()
         return True
 
@@ -1165,12 +1219,14 @@ class Game:
             campfire = self.campfire_at(tile)
 
             if campfire is not None:
+                fire_label = "補充 1 木材" if campfire.lit else "重新點燃"
                 actions.append(
                     (
                         "fire",
-                        "補充 / 重新點燃營火",
+                        fire_label,
                         self.is_near_campfire(campfire)
-                        and self.inventory.get("wood") > 0,
+                        and self.inventory.get("wood") > 0
+                        and (not campfire.lit or campfire.fuel < CAMPFIRE_MAX_FUEL),
                     )
                 )
 
@@ -1202,12 +1258,14 @@ class Game:
             campfire = self.campfire_at(tile)
 
             if campfire is not None:
+                fire_label = "補充 1 木材" if campfire.lit else "重新點燃"
                 actions.append(
                     (
                         "fire",
-                        "補充 / 重新點燃營火",
+                        fire_label,
                         self.is_near_campfire(campfire)
                         and self.inventory.get("wood") > 0
+                        and (not campfire.lit or campfire.fuel < CAMPFIRE_MAX_FUEL)
                         and not self.attack_animating,
                     )
                 )
@@ -1631,30 +1689,41 @@ def draw_button(surface, fonts, rect, label, enabled=True, accent=False) -> None
     centered_text(surface, fonts["small"], label, rect.center, color)
 
 def hud_buttons(game: Game):
+    surface = pygame.display.get_surface()
+    hud = get_right_hud_rect(surface) if surface is not None else HUD_PANEL
     if game.phase == "day":
         entries = [
             ("eat", "吃食物", game.inventory.get("food") > 0),
-            ("fire_day", "加入柴火", game.inventory.get("wood") > 0),
             ("spear", "製作石矛", not game.has_spear and game.inventory.has({"wood": 2, "stone": 1})),
             ("axe", "製作石斧", not game.has_axe and game.inventory.has({"wood": 1, "stone": 2})),
+            ("pickaxe", "製作石鎬", not game.has_pickaxe and game.inventory.has({"wood": 2, "stone": 2})),
             ("armor", "製作護甲", game.inventory.has({"hide": 2, "stone": 1})),
         ]
-        y = 520
+        y = hud.y + 438
+        columns = 2
     elif game.phase == "night":
         entries = [
-            ("fire_night", "加入柴火", game.inventory.get("wood") > 0),
             ("wait", "結束這回合", not game.attack_animating),
         ]
-        y = 555
+        y = hud.y + 440
+        columns = 1
     else:
         entries = [("restart", "重新開始", True)]
-        y = 545
+        y = hud.y + 430
+        columns = 1
 
     buttons = []
     for index, (action, label, enabled) in enumerate(entries):
-        row = index // 2
-        col = index % 2
-        rect = pygame.Rect(855 + col * 185, y + row * 42, 170, 34)
+        gap = 8
+        button_width = (hud.width - 28 - gap * (columns - 1)) // columns
+        row = index // columns
+        col = index % columns
+        rect = pygame.Rect(
+            hud.x + 14 + col * (button_width + gap),
+            y + row * 39,
+            button_width,
+            33,
+        )
         buttons.append((action, label, rect, enabled))
     return buttons
 
@@ -1667,6 +1736,8 @@ def execute_hud_action(game: Game, action: str) -> None:
         game.craft_spear()
     elif action == "axe":
         game.craft_axe()
+    elif action == "pickaxe":
+        game.craft_pickaxe()
     elif action == "armor":
         game.craft_armor()
     elif action == "fire_night":
@@ -1681,17 +1752,23 @@ def execute_hud_action(game: Game, action: str) -> None:
 # 合成清單
 # =========================================================
 def recipe_button_rect() -> pygame.Rect:
-    return pygame.Rect(855, 646, 355, 34)
+    surface = pygame.display.get_surface()
+    hud = get_right_hud_rect(surface) if surface is not None else HUD_PANEL
+    return pygame.Rect(hud.x + 14, hud.bottom - 48, hud.width - 28, 34)
 
 def recipe_modal_rect() -> pygame.Rect:
-    return pygame.Rect(310, 82, 660, 556)
+    surface = pygame.display.get_surface()
+    width, height = surface.get_size() if surface is not None else (SCREEN_WIDTH, SCREEN_HEIGHT)
+    modal_width = min(720, width - 80)
+    modal_height = min(610, height - 100)
+    return pygame.Rect((width - modal_width) // 2, (height - modal_height) // 2, modal_width, modal_height)
 
 def recipe_close_rect() -> pygame.Rect:
     modal = recipe_modal_rect()
     return pygame.Rect(modal.right - 48, modal.y + 14, 32, 32)
 
 def draw_recipe_modal(surface, fonts) -> None:
-    shade = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    shade = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
     shade.fill((0, 0, 0, 150))
     surface.blit(shade, (0, 0))
 
@@ -1737,8 +1814,10 @@ def context_menu_rows(game, tile, origin):
     row_height = 36
     total_height = len(actions) * row_height + 10
 
-    x = min(origin[0], SCREEN_WIDTH - width - 10)
-    y = min(origin[1], SCREEN_HEIGHT - total_height - 10)
+    surface = pygame.display.get_surface()
+    screen_width, screen_height = surface.get_size() if surface is not None else (SCREEN_WIDTH, SCREEN_HEIGHT)
+    x = min(origin[0], screen_width - width - 10)
+    y = min(origin[1], screen_height - total_height - 10)
     x = max(10, x)
     y = max(10, y)
 
@@ -1777,11 +1856,13 @@ def draw_context_menu(surface, fonts, game, tile, origin) -> None:
 # =========================================================
 def draw_selected_tile_info(surface, fonts, game) -> None:
     tile = game.selected_tile
-    text(surface, fonts["small"], "目前選取", 855, 430, MUTED)
-    text(surface, fonts["body"], f"六角格 {tile}", 855, 451, GOLD_LIGHT)
+    hud = get_right_hud_rect(surface)
+    x = hud.x + 14
+    text(surface, fonts["tiny"], "目前選取", x, hud.y + 362, MUTED)
+    text(surface, fonts["small"], f"六角格 {tile}", x, hud.y + 380, GOLD_LIGHT)
 
     if tile not in game.discovered and game.phase == "day":
-        text(surface, fonts["small"], "尚未探索", 1050, 454, MUTED)
+        text(surface, fonts["tiny"], "尚未探索", x, hud.y + 402, MUTED)
         return
 
     terrain = TERRAIN_NAMES[game.terrain[tile]]
@@ -1803,13 +1884,30 @@ def draw_selected_tile_info(surface, fonts, game) -> None:
     if enemies:
         detail += f"｜敵人 x{len(enemies)}"
 
-    text(surface, fonts["small"], detail, 1050, 454, TEXT)
+    text(surface, fonts["tiny"], detail, x, hud.y + 402, TEXT)
 
 
 # =========================================================
 # 遊戲畫面
 # =========================================================
 ICON_CACHE = {}
+UI_ICON_CACHE = {}
+
+
+def draw_ui_icon(surface, name: str, center: tuple[int, int], fallback_color) -> None:
+    """Draw an assets/ui icon, or a safe shape fallback when missing."""
+    if name not in UI_ICON_CACHE:
+        path = os.path.join("assets", "ui", f"{name}.png")
+        try:
+            image = pygame.image.load(path).convert_alpha() if os.path.exists(path) else None
+            UI_ICON_CACHE[name] = pygame.transform.smoothscale(image, (24, 24)) if image else None
+        except pygame.error:
+            UI_ICON_CACHE[name] = None
+    image = UI_ICON_CACHE[name]
+    if image is None:
+        pygame.draw.circle(surface, fallback_color, center, 9)
+    else:
+        surface.blit(image, image.get_rect(center=center))
 
 def draw_game(
     screen,
@@ -1821,10 +1919,16 @@ def draw_game(
     recipe_open=False,
     visual_mgr=None,
     anim_timer=0,
+    notification_manager=None,
+    first_day_tutorial=None,
 ) -> None:
     screen.fill(BG)
 
-    pygame.draw.rect(screen, TOP, pygame.Rect(0, 0, SCREEN_WIDTH, 62))
+    viewport = get_game_viewport(screen)
+    hud = get_right_hud_rect(screen)
+    screen_width = screen.get_width()
+
+    pygame.draw.rect(screen, TOP, pygame.Rect(0, 0, screen_width, 62))
     text(screen, fonts["heading"], "石器時代：荒野求生 v6", 28, 18, GOLD_LIGHT)
     text(screen, fonts["small"], "拖曳角色＝快速移動｜右鍵＝操作選單", 345, 22, MUTED)
 
@@ -1841,14 +1945,13 @@ def draw_game(
         turn_label = "生命值歸零"
         phase_color = RED
 
-    pill = pygame.Rect(920, 14, 130, 34)
+    pill = pygame.Rect(max(600, hud.x - 270), 14, 130, 34)
     pygame.draw.rect(screen, phase_color, pill, border_radius=17)
     centered_text(screen, fonts["small"], phase_label, pill.center, BLACK)
-    text(screen, fonts["small"], turn_label, 1070, 22, phase_color)
+    text(screen, fonts["small"], turn_label, pill.right + 18, 22, phase_color)
 
-    panel(screen, MAP_PANEL, (23, 26, 29), 16)
-    panel(screen, HUD_PANEL, PANEL, 16)
-    panel(screen, LOG_PANEL, (23, 26, 29), 14)
+    panel(screen, viewport, (23, 26, 29), 16)
+    panel(screen, hud, PANEL, 16)
 
     hover_tile = tile_at_pixel(pygame.mouse.get_pos())
 
@@ -1906,9 +2009,9 @@ def draw_game(
     # 夜晚濾鏡與營火光暈
     # =====================================================
     if game.phase == "night":
-        tint = pygame.Surface((MAP_PANEL.width, MAP_PANEL.height), pygame.SRCALPHA)
+        tint = pygame.Surface((viewport.width, viewport.height), pygame.SRCALPHA)
         tint.fill((5, 10, 27, 72))
-        screen.blit(tint, MAP_PANEL.topleft)
+        screen.blit(tint, viewport.topleft)
 
             # 將所有點燃營火半徑 4 內的六角格標示為安全區。
         safe_overlay = pygame.Surface(
@@ -2041,55 +2144,66 @@ def draw_game(
     # ... (下半部 draw_game 的生存紀錄與 HUD 程式碼保持不變) ...
 
     # =====================================================
-    # 生存紀錄
-    # =====================================================
-    text(screen, fonts["small"], "生存紀錄", 38, 607, GOLD_LIGHT)
-    y = 635
-    for message in game.logs[-3:]:
-        text(screen, fonts["small"], "• " + message[:72], 38, y, MUTED)
-        y += 21
-
-    # =====================================================
     # HUD 狀態區
     # =====================================================
-    text(screen, fonts["heading"], "生存狀態", 855, 102)
-    draw_bar(screen, fonts, 855, 141, 175, "生命", game.survival.health, 100, RED)
-    draw_bar(screen, fonts, 1050, 141, 175, "護甲", game.survival.armor, 50, BLUE)
-    draw_bar(screen, fonts, 855, 194, 370, "飢餓", game.survival.hunger, 100, GOLD)
+    hud_x = hud.x + 14
+    hud_width = hud.width - 28
+    text(screen, fonts["body"], "生存狀態", hud_x, hud.y + 16, GOLD_LIGHT)
+    draw_ui_icon(screen, "heart", (hud_x + 10, hud.y + 61), RED)
+    draw_bar(screen, fonts, hud_x + 27, hud.y + 43, hud_width - 27, "生命", game.survival.health, 100, RED)
+    draw_ui_icon(screen, "armor", (hud_x + 10, hud.y + 111), BLUE)
+    draw_bar(screen, fonts, hud_x + 27, hud.y + 93, hud_width - 27, "護甲", game.survival.armor, 50, BLUE)
+    draw_ui_icon(screen, "hunger", (hud_x + 10, hud.y + 161), GOLD)
+    draw_bar(screen, fonts, hud_x + 27, hud.y + 143, hud_width - 27, "飢餓", game.survival.hunger, 100, GOLD)
 
     resource_values = [
-        ("食物", game.inventory.get("food"), (178, 87, 63)),
-        ("木材", game.inventory.get("wood"), (133, 88, 52)),
-        ("石頭", game.inventory.get("stone"), (147, 147, 143)),
-        ("獸皮", game.inventory.get("hide"), (162, 118, 72)),
+        ("food", "食", game.inventory.get("food"), (178, 87, 63)),
+        ("wood", "木", game.inventory.get("wood"), (133, 88, 52)),
+        ("stone", "石", game.inventory.get("stone"), (147, 147, 143)),
+        ("hide", "皮", game.inventory.get("hide"), (162, 118, 72)),
     ]
-    for index, (label, value, color) in enumerate(resource_values):
+    card_gap = 8
+    card_width = (hud_width - card_gap) // 2
+    for index, (icon_name, label, value, color) in enumerate(resource_values):
         row = index // 2
         col = index % 2
-        rect = pygame.Rect(855 + col * 185, 250 + row * 58, 170, 48)
+        rect = pygame.Rect(hud_x + col * (card_width + card_gap), hud.y + 198 + row * 48, card_width, 40)
         pygame.draw.rect(screen, PANEL_2, rect, border_radius=9)
-        pygame.draw.circle(screen, color, (rect.x + 20, rect.centery), 8)
-        text(screen, fonts["tiny"], label, rect.x + 36, rect.y + 7, MUTED)
-        text(screen, fonts["body"], value, rect.x + 36, rect.y + 22, TEXT)
+        draw_ui_icon(screen, icon_name, (rect.x + 18, rect.centery), color)
+        text(screen, fonts["tiny"], label, rect.x + 34, rect.y + 5, MUTED)
+        text(screen, fonts["small"], value, rect.x + 34, rect.y + 19, TEXT)
 
-    fire_rect = pygame.Rect(855, 372, 355, 44)
+    equipment = (
+        ("spear", game.has_spear),
+        ("axe", game.has_axe),
+        ("pickaxe", game.has_pickaxe),
+    )
+    for index, (icon_name, owned) in enumerate(equipment):
+        center = (hud_x + 18 + index * 36, hud.y + 303)
+        draw_ui_icon(screen, icon_name, center, GOLD if owned else (72, 75, 78))
+        if not owned:
+            veil = pygame.Surface((24, 24), pygame.SRCALPHA)
+            veil.fill((20, 22, 24, 145))
+            screen.blit(veil, veil.get_rect(center=center))
+
+    fire_rect = pygame.Rect(hud_x, hud.y + 320, hud_width, 38)
     pygame.draw.rect(screen, PANEL_2, fire_rect, border_radius=9)
     fire_text = "燃燒中" if game.campfire.lit else "已熄滅"
-    text(screen, fonts["small"], "營火", 870, 384, MUTED)
-    text(screen, fonts["small"], f"{fire_text}｜燃料 {game.campfire.fuel}/12", 945, 384, GOLD_LIGHT if game.campfire.lit else RED)
+    draw_ui_icon(screen, "campfire", (fire_rect.x + 19, fire_rect.centery), GOLD)
+    text(screen, fonts["tiny"], f"{fire_text}｜{game.campfire.fuel}/{CAMPFIRE_MAX_FUEL}", fire_rect.x + 38, fire_rect.y + 11, GOLD_LIGHT if game.campfire.lit else RED)
 
     draw_selected_tile_info(screen, fonts, game)
 
     # 操作提示
     if game.phase == "day":
-        text(screen, fonts["small"], "拖曳角色快速移動｜右鍵：採集 / 建造", 855, 487, GOLD_LIGHT)
+        text(screen, fonts["tiny"], "拖曳移動｜右鍵操作", hud_x, hud.y + 420, GOLD_LIGHT)
     elif game.phase == "night":
         if game.attack_animating:
-            text(screen, fonts["small"], "攻擊中……", 855, 487, GOLD_LIGHT)
+            text(screen, fonts["tiny"], "攻擊中……", hud_x, hud.y + 420, GOLD_LIGHT)
         else:
-            text(screen, fonts["small"], "拖曳角色＝移動｜左鍵敵人＝攻擊", 855, 487, BLUE)
+            text(screen, fonts["tiny"], "拖曳移動｜左鍵攻擊", hud_x, hud.y + 420, BLUE)
     else:
-        text(screen, fonts["small"], "你沒有撐過這次荒野求生。", 855, 487, RED)
+        text(screen, fonts["tiny"], "你沒有撐過這次荒野求生。", hud_x, hud.y + 420, RED)
 
     # =====================================================
     # HUD 按鈕與選單
@@ -2104,6 +2218,18 @@ def draw_game(
         
     if recipe_open:
         draw_recipe_modal(screen, fonts)
+
+    if notification_manager is not None:
+        notification_manager.draw(screen, fonts, viewport)
+
+    if first_day_tutorial is not None and first_day_tutorial.current_message():
+        message = first_day_tutorial.current_message()
+        overlay = pygame.Rect(viewport.centerx - min(310, viewport.width // 2 - 20), viewport.y + 14, min(620, viewport.width - 40), 58)
+        shade = pygame.Surface(overlay.size, pygame.SRCALPHA)
+        shade.fill((15, 18, 20, 220))
+        screen.blit(shade, overlay.topleft)
+        pygame.draw.rect(screen, GOLD, overlay, 1, border_radius=10)
+        centered_text(screen, fonts["small"], f"教學 {first_day_tutorial.step + 1}/11｜{message}", overlay.center, TEXT)
 
 
 # =========================================================
@@ -2151,12 +2277,15 @@ TUTORIAL = [
 ]
 
 def menu_start_rect() -> pygame.Rect:
-    return pygame.Rect(490, 445, 300, 58)
+    surface = pygame.display.get_surface()
+    width, height = surface.get_size() if surface is not None else (SCREEN_WIDTH, SCREEN_HEIGHT)
+    return pygame.Rect(width // 2 - 150, int(height * 0.62), 300, 58)
 
 def draw_menu(screen, fonts) -> None:
     screen.fill(BG)
-    for row in range(9):
-        for col in range(15):
+    width, height = screen.get_size()
+    for row in range(height // 80 + 2):
+        for col in range(width // 90 + 2):
             x = col * 90 + 20 + (row % 2) * 45
             y = row * 80 + 20
             points = [
@@ -2168,30 +2297,36 @@ def draw_menu(screen, fonts) -> None:
             ]
             pygame.draw.polygon(screen, (29, 32, 35), points, 1)
 
-    centered_text(screen, fonts["title"], "石器時代：荒野求生", (SCREEN_WIDTH // 2, 175), GOLD_LIGHT)
-    centered_text(screen, fonts["body"], "滑鼠回合制生存策略", (SCREEN_WIDTH // 2, 225), MUTED)
-    draw_campfire(screen, (SCREEN_WIDTH // 2, 340), True)
+    centered_text(screen, fonts["title"], "石器時代：荒野求生", (width // 2, int(height * 0.24)), GOLD_LIGHT)
+    centered_text(screen, fonts["body"], "滑鼠回合制生存策略", (width // 2, int(height * 0.31)), MUTED)
+    draw_campfire(screen, (width // 2, int(height * 0.47)), True)
     draw_button(screen, fonts, menu_start_rect(), "開始遊戲", True, True)
-    centered_text(screen, fonts["small"], "白天 20 回合｜夜晚 20 回合｜右鍵情境操作", (SCREEN_WIDTH // 2, 545), MUTED)
-    centered_text(screen, fonts["tiny"], "ESC 離開", (SCREEN_WIDTH // 2, 600), MUTED)
+    centered_text(screen, fonts["small"], "白天 20 回合｜夜晚 20 回合｜右鍵情境操作", (width // 2, int(height * 0.76)), MUTED)
+    centered_text(screen, fonts["tiny"], "F11 全螢幕｜ESC 離開", (width // 2, int(height * 0.84)), MUTED)
 
 def tutorial_buttons() -> dict[str, pygame.Rect]:
+    surface = pygame.display.get_surface()
+    width, height = surface.get_size() if surface is not None else (SCREEN_WIDTH, SCREEN_HEIGHT)
+    y = min(height - 72, int(height * 0.78))
     return {
-        "back": pygame.Rect(315, 560, 170, 42),
-        "skip": pygame.Rect(555, 560, 170, 42),
-        "next": pygame.Rect(795, 560, 170, 42),
+        "back": pygame.Rect(width // 2 - 285, y, 170, 42),
+        "skip": pygame.Rect(width // 2 - 85, y, 170, 42),
+        "next": pygame.Rect(width // 2 + 115, y, 170, 42),
     }
 
 def draw_tutorial(screen, fonts, page: int) -> None:
     screen.fill(BG)
-    card = pygame.Rect(180, 92, 920, 530)
+    width, height = screen.get_size()
+    card_width = min(920, width - 80)
+    card_height = min(530, height - 120)
+    card = pygame.Rect((width - card_width) // 2, 72, card_width, card_height)
     panel(screen, card, (29, 32, 36), 22)
     
     title_value, lines = TUTORIAL[page]
-    text(screen, fonts["tiny"], f"新手教學 {page + 1}/{len(TUTORIAL)}", 235, 125, MUTED)
-    text(screen, fonts["title"], title_value, 235, 160, GOLD_LIGHT)
+    text(screen, fonts["tiny"], f"新手教學 {page + 1}/{len(TUTORIAL)}", card.x + 55, card.y + 33, MUTED)
+    text(screen, fonts["title"], title_value, card.x + 55, card.y + 68, GOLD_LIGHT)
     
-    y = 245
+    y = card.y + 153
     for line in lines:
         pygame.draw.circle(screen, GOLD, (253, y + 10), 5)
         text(screen, fonts["body"], line, 278, y, TEXT)
@@ -2201,7 +2336,7 @@ def draw_tutorial(screen, fonts, page: int) -> None:
         pygame.draw.circle(
             screen,
             GOLD if index == page else (75, 78, 82),
-            (SCREEN_WIDTH // 2 - 45 + index * 30, 520),
+            (width // 2 - 45 + index * 30, card.bottom - 30),
             6,
         )
         
@@ -2225,13 +2360,16 @@ def main() -> None:
             pygame.quit()
             return
 
-        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        display_manager = DisplayManager()
+        screen = display_manager.create_window()
         clock = pygame.time.Clock()
         fonts = create_fonts()
         
         # display 建立後才載入圖片
         visual_mgr = VisualManager()
         game = Game()
+        notification_manager = FloatingNotificationManager()
+        first_day_tutorial = TutorialController(game)
     except Exception as e:
         print()
         print("=" * 45)
@@ -2274,7 +2412,21 @@ def main() -> None:
                 running = False
                 continue
 
+            if event.type == pygame.VIDEORESIZE:
+                screen = display_manager.resize(event.size)
+                continue
+
             if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_F11:
+                    screen = display_manager.toggle_fullscreen()
+                    continue
+                if (
+                    view == "game"
+                    and event.key in (pygame.K_RETURN, pygame.K_SPACE)
+                    and first_day_tutorial.step in (0, 8)
+                ):
+                    first_day_tutorial.acknowledge(game)
+                    continue
                 if event.key == pygame.K_ESCAPE:
                     if view == "game":
                         if recipe_open:
@@ -2452,6 +2604,8 @@ def main() -> None:
 
             day_transition.play_day_survived(completed_day)
 
+            screen = display_manager.restore()
+
             pygame.display.set_caption("石器時代：荒野求生 v6 - 音效整合")
 
         # =====================================================
@@ -2503,9 +2657,12 @@ def main() -> None:
             main_bgm_playing = False
 
             action = game_over.play_game_over(game.death_reason)
+            screen = display_manager.restore()
 
             if action == "restart":
                 game = Game()
+                notification_manager = FloatingNotificationManager()
+                first_day_tutorial = TutorialController(game)
                 context_tile = None
                 dragging_player = False
                 drag_path = None
@@ -2541,6 +2698,12 @@ def main() -> None:
         if view == "game" and game.floating_icon_type is not None:
             if pygame.time.get_ticks() - game.floating_icon_start_time > 1000:
                 game.floating_icon_type = None
+
+        if view == "game":
+            now_ms = pygame.time.get_ticks()
+            notification_manager.sync_from_logs(game.logs, now_ms)
+            notification_manager.update(now_ms)
+            first_day_tutorial.update(game)
         # =====================================================
         # 畫面渲染 (Render Phase)
         # =====================================================
@@ -2551,7 +2714,8 @@ def main() -> None:
         else:
             draw_game(
                 screen, fonts, game, context_tile, context_origin, 
-                drag_path, recipe_open, visual_mgr, anim_timer
+                drag_path, recipe_open, visual_mgr, anim_timer,
+                notification_manager, first_day_tutorial,
             )
 
         pygame.display.flip()
