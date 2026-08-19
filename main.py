@@ -1657,7 +1657,6 @@ def draw_boar(surface, center, hp, max_hp) -> None:
     pygame.draw.rect(surface, (48, 48, 48), pygame.Rect(x - 18, y + 20, 36, 5))
     pygame.draw.rect(surface, RED, pygame.Rect(x - 18, y + 20, int(36 * ratio), 5))
 
-
 # =========================================================
 # HUD
 # =========================================================
@@ -1921,13 +1920,24 @@ def draw_game(
     anim_timer=0,
     notification_manager=None,
     first_day_tutorial=None,
+    camera=None,
 ) -> None:
     screen.fill(BG)
 
     viewport = get_game_viewport(screen)
     hud = get_right_hud_rect(screen)
     screen_width = screen.get_width()
+    if camera is not None:
+        player_world_pos = axial_to_world_pixel(
+            game.player,
+            HEX_SIZE,
+            (MAP_ORIGIN_X, MAP_ORIGIN_Y),
+        )
 
+        camera.center_on(
+            player_world_pos,
+            viewport,
+        )
     pygame.draw.rect(screen, TOP, pygame.Rect(0, 0, screen_width, 62))
     text(screen, fonts["heading"], "石器時代：荒野求生 v6", 28, 18, GOLD_LIGHT)
     text(screen, fonts["small"], "拖曳角色＝快速移動｜右鍵＝操作選單", 345, 22, MUTED)
@@ -1953,15 +1963,20 @@ def draw_game(
     panel(screen, viewport, (23, 26, 29), 16)
     panel(screen, hud, PANEL, 16)
 
-    hover_tile = tile_at_pixel(pygame.mouse.get_pos())
-
+    hover_tile = tile_at_pixel(
+        pygame.mouse.get_pos(),
+        camera,
+        viewport,
+    )
+    previous_clip = screen.get_clip()
+    screen.set_clip(viewport)
     # =====================================================
     # 地圖
     # =====================================================
     for r in range(MAP_ROWS):
         for q in range(MAP_COLS):
             tile = (q, r)
-            center = axial_to_pixel(tile)
+            center = axial_to_pixel(tile, camera)
             discovered = tile in game.discovered
             
                 
@@ -1991,18 +2006,18 @@ def draw_game(
     # 拖曳路徑
     # =====================================================
     if drag_path and len(drag_path) > 1:
-        centers = [axial_to_pixel(tile) for tile in drag_path]
+        centers = [axial_to_pixel(tile, camera) for tile in drag_path]
         pygame.draw.lines(screen, GOLD_LIGHT, False, centers, 4)
         
         for index, tile in enumerate(drag_path):
-            center = axial_to_pixel(tile)
+            center = axial_to_pixel(tile, camera)
             pygame.draw.polygon(screen, GOLD_LIGHT, hex_points(center), 3)
             if index > 0:
                 marker_radius = 7 if index == len(drag_path) - 1 else 5
                 pygame.draw.circle(screen, (255, 235, 160), center, marker_radius)
                 
         cost = len(drag_path) - 1
-        destination = axial_to_pixel(drag_path[-1])
+        destination = axial_to_pixel(drag_path[-1], camera)
         text(screen, fonts["tiny"], f"移動成本：{cost} 回合", destination[0] + 18, destination[1] - 30, GOLD_LIGHT)
 
     # =====================================================
@@ -2015,13 +2030,13 @@ def draw_game(
 
             # 將所有點燃營火半徑 4 內的六角格標示為安全區。
         safe_overlay = pygame.Surface(
-            (SCREEN_WIDTH, SCREEN_HEIGHT),
+            screen.get_size(),
             pygame.SRCALPHA,
         )
 
         for tile in game.terrain:
             if game.is_in_lit_campfire_range(tile):
-                center = axial_to_pixel(tile)
+                center = axial_to_pixel(tile, camera)
 
                 pygame.draw.polygon(
                     safe_overlay,
@@ -2042,7 +2057,7 @@ def draw_game(
     # 建築物與營火
     # =====================================================
     for building in game.buildings.buildings.values():
-        center = axial_to_pixel(building.position)
+        center = axial_to_pixel(building.position, camera)
         if building.building_type == BUILD_WALL:
             draw_wall(screen, center, building.hp, building.max_hp)
         else:
@@ -2051,7 +2066,7 @@ def draw_game(
     for campfire in game.campfires.values():
         draw_campfire(
             screen,
-            axial_to_pixel(campfire.position),
+            axial_to_pixel(campfire.position, camera),
             campfire.lit,
         )
 
@@ -2063,7 +2078,7 @@ def draw_game(
         enemy_groups.setdefault(enemy.position, []).append(enemy)
         
     for tile, enemies in enemy_groups.items():
-        base_x, base_y = axial_to_pixel(tile)
+        base_x, base_y = axial_to_pixel(tile, camera)
         for index, enemy in enumerate(enemies[:3]):
             offset_x = (index - 1) * 12 if len(enemies) > 1 else 0
             center = (base_x + offset_x, base_y - 3)
@@ -2081,7 +2096,7 @@ def draw_game(
     # =====================================================
     # 玩家繪製 (傳遞已經算好的 attack_frame 給繪製模組)
     # =====================================================
-    player_center = axial_to_pixel(game.player)
+    player_center = axial_to_pixel(game.player, camera)
     draw_player(
         screen,
         player_center,
@@ -2099,7 +2114,10 @@ def draw_game(
         float_y = int((elapsed / 1000) * 40) # 最多往上飄移 40 pixel
         alpha = max(0, 255 - int((elapsed / 1000) * 255)) # 漸隱透明度 (255 -> 0)
         
-        icon_cx, icon_cy = axial_to_pixel(game.floating_icon_tile)
+        icon_cx, icon_cy = axial_to_pixel(
+            game.floating_icon_tile,
+            camera,
+        )
         icon_cy -= (20 + float_y) # 往上飄移
         
         icon_name = game.floating_icon_type
@@ -2142,7 +2160,7 @@ def draw_game(
             screen.blit(val_text, val_text.get_rect(center=(icon_cx, icon_cy)))
 
     # ... (下半部 draw_game 的生存紀錄與 HUD 程式碼保持不變) ...
-
+    screen.set_clip(previous_clip)
     # =====================================================
     # HUD 狀態區
     # =====================================================
@@ -2368,6 +2386,7 @@ def main() -> None:
         # display 建立後才載入圖片
         visual_mgr = VisualManager()
         game = Game()
+        camera = Camera()
         notification_manager = FloatingNotificationManager()
         first_day_tutorial = TutorialController(game)
     except Exception as e:
@@ -2492,7 +2511,11 @@ def main() -> None:
                 # 玩家拖曳移動
                 # =================================================
                 if event.type == pygame.MOUSEMOTION and dragging_player and not recipe_open:
-                    tile = tile_at_pixel(event.pos)
+                    tile = tile_at_pixel(
+                    event.pos,
+                    camera,
+                    get_game_viewport(screen),
+                )
                     if tile is None:
                         drag_path = None
                     else:
@@ -2534,7 +2557,11 @@ def main() -> None:
                 # 右鍵選單
                 # =================================================
                 if event.button == 3:
-                    tile = tile_at_pixel(mouse)
+                    tile = tile_at_pixel(
+                        mouse,
+                        camera,
+                        get_game_viewport(screen),
+                    )
                     if tile is not None and game.phase != "game_over":
                         game.selected_tile = tile
                         context_tile = tile
@@ -2579,7 +2606,11 @@ def main() -> None:
                 # =================================================
                 # 點擊地圖
                 # =================================================
-                tile = tile_at_pixel(mouse)
+                tile = tile_at_pixel(
+                    mouse,
+                    camera,
+                    get_game_viewport(screen),
+                )
 
                 # 按下自己所在的位置：準備拖曳
                 if tile == game.player and game.phase in ("day", "night"):
@@ -2713,9 +2744,18 @@ def main() -> None:
             draw_tutorial(screen, fonts, tutorial_page)
         else:
             draw_game(
-                screen, fonts, game, context_tile, context_origin, 
-                drag_path, recipe_open, visual_mgr, anim_timer,
-                notification_manager, first_day_tutorial,
+                screen,
+                fonts,
+                game,
+                context_tile,
+                context_origin,
+                drag_path,
+                recipe_open,
+                visual_mgr,
+                anim_timer,
+                notification_manager,
+                first_day_tutorial,
+                camera,
             )
 
         pygame.display.flip()
