@@ -2173,8 +2173,37 @@ def recipe_modal_rect() -> pygame.Rect:
 def recipe_close_rect() -> pygame.Rect:
     modal = recipe_modal_rect()
     return pygame.Rect(modal.right - 48, modal.y + 14, 32, 32)
+def recipe_max_scroll() -> int:
+    modal = recipe_modal_rect()
 
-def draw_recipe_modal(surface, fonts) -> None:
+    content_height = 0
+
+    for category in ("裝備", "建造"):
+        content_height += 29
+
+        recipes = [
+            recipe
+            for recipe in RECIPE_CATALOG
+            if recipe["category"] == category
+        ]
+
+        content_height += len(recipes) * 70
+        content_height += 8
+
+    visible_height = max(
+        0,
+        modal.height - 112,
+    )
+
+    return max(
+        0,
+        content_height - visible_height,
+    )
+def draw_recipe_modal(
+    surface,
+    fonts,
+    scroll_y=0,
+) -> None:
     shade = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
     shade.fill((0, 0, 0, 150))
     surface.blit(shade, (0, 0))
@@ -2194,7 +2223,17 @@ def draw_recipe_modal(surface, fonts) -> None:
     pygame.draw.rect(surface, RED, close, 1, border_radius=7)
     centered_text(surface, fonts["body"], "X", close.center, TEXT)
 
-    y = modal.y + 92
+    content_rect = pygame.Rect(
+        modal.x + 12,
+        modal.y + 86,
+        modal.width - 24,
+        modal.height - 100,
+    )
+
+    old_clip = surface.get_clip()
+    surface.set_clip(content_rect)
+
+    y = modal.y + 92 - scroll_y
     for category in ("裝備", "建造"):
         text(surface, fonts["body"], category, modal.x + 28, y, GOLD_LIGHT if category == "裝備" else BLUE)
         y += 29
@@ -2210,6 +2249,7 @@ def draw_recipe_modal(surface, fonts) -> None:
             text(surface, fonts["tiny"], f"效果：{recipe['effect']}", row.x + 14, row.y + 36, MUTED)
             y += 70
         y += 8
+    surface.set_clip(old_clip)
 
 
 # =========================================================
@@ -2324,6 +2364,7 @@ def draw_game(
     context_origin,
     drag_path=None,
     recipe_open=False,
+    recipe_scroll=0,
     inventory_open=False,
     visual_mgr=None,
     anim_timer=0,
@@ -2763,7 +2804,12 @@ def draw_game(
         draw_button(screen, fonts, rect, label, enabled, accent=(action in ("wait", "restart")))
         
     draw_button(screen, fonts, recipe_button_rect(), "關閉合成清單" if recipe_open else "合成清單", True, accent=recipe_open)
-
+    if recipe_open:
+        draw_recipe_modal(
+            screen,
+            fonts,
+            recipe_scroll,
+        )
     if context_tile is not None and not recipe_open:
         draw_context_menu(screen, fonts, game, context_tile, context_origin)
         
@@ -2975,6 +3021,7 @@ def main() -> None:
     dragging_player = False
     drag_path = None
     recipe_open = False
+    recipe_scroll = 0
     inventory_open = False
     anim_timer = 0
     
@@ -3099,7 +3146,28 @@ def main() -> None:
                     drag_path = None
                     context_tile = None
                     continue
-
+                if event.type == pygame.MOUSEWHEEL:
+                    if recipe_open:
+                        recipe_scroll -= event.y * 40
+                        recipe_scroll = max(
+                            0,
+                            min(
+                                recipe_scroll,
+                                recipe_max_scroll(),
+                            ),
+                        )
+                    continue
+                if event.type == pygame.MOUSEWHEEL:
+                    if recipe_open:
+                        recipe_scroll -= event.y * 40
+                        recipe_scroll = max(
+                            0,
+                            min(
+                                recipe_scroll,
+                                recipe_max_scroll(),
+                            ),
+                        )
+                    continue
                 if event.type != pygame.MOUSEBUTTONDOWN:
                     continue
 
@@ -3111,6 +3179,10 @@ def main() -> None:
                 if event.button == 1 and recipe_button_rect().collidepoint(mouse):
                     audio.play_sfx("click")
                     recipe_open = not recipe_open
+
+                    if recipe_open:
+                        recipe_scroll = 0
+
                     context_tile = None
                     dragging_player = False
                     drag_path = None
@@ -3120,6 +3192,8 @@ def main() -> None:
                     if event.button == 1 and recipe_close_rect().collidepoint(mouse):
                         audio.play_sfx("click")
                         recipe_open = False
+                        recipe_scroll = 0
+                        inventory_open = False
                     continue
 
                 # =================================================
@@ -3331,6 +3405,7 @@ def main() -> None:
                 context_origin,
                 drag_path,
                 recipe_open,
+                recipe_scroll,
                 inventory_open,
                 visual_mgr,
                 anim_timer,
