@@ -20,8 +20,6 @@ class VisualManager:
             "tree_02": os.path.join("assets", "images", "objects", "treePine_large.png"),
             "tree_03": os.path.join("assets", "images", "objects", "treePine_small.png"),
             
-            # 其他物件
-            "chest": os.path.join("assets", "images", "objects", "chest_01.png"),
             
             # 👇 新增：主角的 Sprite Sheet 路徑 👇
             "player": os.path.join("assets", "images", "characters", "player.png"),
