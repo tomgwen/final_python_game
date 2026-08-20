@@ -15,6 +15,8 @@ import math
 import os
 import random
 
+import inventory_ui
+import icon_manager
 import intro
 import game_over
 import day_transition
@@ -1219,16 +1221,17 @@ class Game:
             campfire = self.campfire_at(tile)
 
             if campfire is not None:
-                fire_label = "補充 1 木材" if campfire.lit else "重新點燃"
-                actions.append(
-                    (
-                        "fire",
-                        fire_label,
-                        self.is_near_campfire(campfire)
-                        and self.inventory.get("wood") > 0
-                        and (not campfire.lit or campfire.fuel < CAMPFIRE_MAX_FUEL),
-                    )
-                )
+                if campfire.fuel >= CAMPFIRE_MAX_FUEL:
+                    fire_label = f"燃料: {campfire.fuel}/{CAMPFIRE_MAX_FUEL} [燃料已滿]"
+                    can_add = False
+                elif self.inventory.get("wood") <= 0:
+                    fire_label = f"燃料: {campfire.fuel}/{CAMPFIRE_MAX_FUEL} [缺木材]"
+                    can_add = False
+                else:
+                    fire_label = f"燃料: {campfire.fuel}/{CAMPFIRE_MAX_FUEL} [加入木材]"
+                    can_add = self.is_near_campfire(campfire)
+
+                actions.append(("fire", fire_label, can_add))
 
             return actions
         if self.phase == "night":
@@ -1258,17 +1261,17 @@ class Game:
             campfire = self.campfire_at(tile)
 
             if campfire is not None:
-                fire_label = "補充 1 木材" if campfire.lit else "重新點燃"
-                actions.append(
-                    (
-                        "fire",
-                        fire_label,
-                        self.is_near_campfire(campfire)
-                        and self.inventory.get("wood") > 0
-                        and (not campfire.lit or campfire.fuel < CAMPFIRE_MAX_FUEL)
-                        and not self.attack_animating,
-                    )
-                )
+                if campfire.fuel >= CAMPFIRE_MAX_FUEL:
+                    fire_label = f"燃料: {campfire.fuel}/{CAMPFIRE_MAX_FUEL} [燃料已滿]"
+                    can_add = False
+                elif self.inventory.get("wood") <= 0:
+                    fire_label = f"燃料: {campfire.fuel}/{CAMPFIRE_MAX_FUEL} [缺木材]"
+                    can_add = False
+                else:
+                    fire_label = f"燃料: {campfire.fuel}/{CAMPFIRE_MAX_FUEL} [加入木材]"
+                    can_add = self.is_near_campfire(campfire) and not self.attack_animating
+
+                actions.append(("fire", fire_label, can_add))
 
             actions.append(
                 (
@@ -1916,6 +1919,7 @@ def draw_game(
     context_origin,
     drag_path=None,
     recipe_open=False,
+    inventory_open = False,
     visual_mgr=None,
     anim_timer=0,
     notification_manager=None,
@@ -2191,7 +2195,12 @@ def draw_game(
         col = index % 2
         rect = pygame.Rect(hud_x + col * (card_width + card_gap), hud.y + 198 + row * 48, card_width, 40)
         pygame.draw.rect(screen, PANEL_2, rect, border_radius=9)
-        draw_ui_icon(screen, icon_name, (rect.x + 18, rect.centery), color)
+        
+        # 💡 使用我們剛寫好的 icon_manager 來讀取 resources 分類的圖示
+        icon_surface = icon_manager.get_icon("resources", icon_name, (24, 24))
+        icon_rect = icon_surface.get_rect(center=(rect.x + 18, rect.centery))
+        screen.blit(icon_surface, icon_rect)
+        
         text(screen, fonts["tiny"], label, rect.x + 34, rect.y + 5, MUTED)
         text(screen, fonts["small"], value, rect.x + 34, rect.y + 19, TEXT)
 
@@ -2202,17 +2211,18 @@ def draw_game(
     )
     for index, (icon_name, owned) in enumerate(equipment):
         center = (hud_x + 18 + index * 36, hud.y + 303)
-        draw_ui_icon(screen, icon_name, center, GOLD if owned else (72, 75, 78))
+        
+        # 💡 改用 icon_manager 讀取 tools 分類的武器圖示
+        icon_surface = icon_manager.get_icon("tools", icon_name, (24, 24))
+        icon_rect = icon_surface.get_rect(center=center)
+        screen.blit(icon_surface, icon_rect)
+        
         if not owned:
             veil = pygame.Surface((24, 24), pygame.SRCALPHA)
             veil.fill((20, 22, 24, 145))
             screen.blit(veil, veil.get_rect(center=center))
 
-    fire_rect = pygame.Rect(hud_x, hud.y + 320, hud_width, 38)
-    pygame.draw.rect(screen, PANEL_2, fire_rect, border_radius=9)
-    fire_text = "燃燒中" if game.campfire.lit else "已熄滅"
-    draw_ui_icon(screen, "campfire", (fire_rect.x + 19, fire_rect.centery), GOLD)
-    text(screen, fonts["tiny"], f"{fire_text}｜{game.campfire.fuel}/{CAMPFIRE_MAX_FUEL}", fire_rect.x + 38, fire_rect.y + 11, GOLD_LIGHT if game.campfire.lit else RED)
+    
 
     draw_selected_tile_info(screen, fonts, game)
 
@@ -2240,6 +2250,9 @@ def draw_game(
         
     if recipe_open:
         draw_recipe_modal(screen, fonts)
+    if inventory_open:
+        inventory_ui.draw_inventory_modal(screen, fonts, game)
+
 
     if notification_manager is not None:
         notification_manager.draw(screen, fonts, viewport)
@@ -2376,6 +2389,8 @@ def main() -> None:
         pygame.init()
         pygame.display.set_caption("石器時代：荒野求生 v6 - 音效整合")
 
+        display_manager = DisplayManager()
+        screen = display_manager.create_window()
         start_game = intro.play_intro()
 
         if not start_game:
@@ -2419,6 +2434,7 @@ def main() -> None:
     dragging_player = False
     drag_path = None
     recipe_open = False
+    inventory_open = False
     anim_timer = 0
     
     last_phase = game.phase
@@ -2454,12 +2470,22 @@ def main() -> None:
                     if view == "game":
                         if recipe_open:
                             recipe_open = False
+                        elif inventory_open:       # 💡 按 ESC 先關背包
+                            inventory_open = False
                         elif context_tile is not None:
                             context_tile = None
                         else:
                             running = False
                     else:
                         running = False
+                
+                # 💡 新增快捷鍵 I：開啟/關閉背包 (記得與合成清單互斥)
+                elif event.key == pygame.K_i and view == "game":
+                    inventory_open = not inventory_open
+                    recipe_open = False 
+                    context_tile = None
+                    dragging_player = False
+                
                 elif event.key == pygame.K_h and view == "game":
                     view = "tutorial"
                     tutorial_page = 0
@@ -2551,10 +2577,11 @@ def main() -> None:
                     drag_path = None
                     continue
 
-                if recipe_open:
-                    if event.button == 1 and recipe_close_rect().collidepoint(mouse):
+                if recipe_open or inventory_open:
+                    if recipe_open and event.button == 1 and recipe_close_rect().collidepoint(mouse):
                         audio.play_sfx("click")
                         recipe_open = False
+                    # 如果背包打開，點擊畫面任何地方都不會傳給地圖
                     continue
 
                 # =================================================
@@ -2755,6 +2782,7 @@ def main() -> None:
                 context_origin,
                 drag_path,
                 recipe_open,
+                inventory_open,
                 visual_mgr,
                 anim_timer,
                 notification_manager,
