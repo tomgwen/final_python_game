@@ -2668,9 +2668,27 @@ def draw_tutorial(screen, fonts, page: int) -> None:
     text(screen, fonts["title"], title_value, card.x + 55, card.y + 68, GOLD_LIGHT)
     
     y = card.y + 153
+
     for line in lines:
-        pygame.draw.circle(screen, GOLD, (253, y + 10), 5)
-        text(screen, fonts["body"], line, 278, y, TEXT)
+        bullet_x = card.x + 55
+        text_x = card.x + 80
+
+        pygame.draw.circle(
+            screen,
+            GOLD,
+            (bullet_x, y + 10),
+            5,
+        )
+
+        text(
+            screen,
+            fonts["body"],
+            line,
+            text_x,
+            y,
+            TEXT,
+        )
+
         y += 58
         
     for index in range(len(TUTORIAL)):
@@ -2695,14 +2713,19 @@ def main() -> None:
         pygame.init()
         pygame.display.set_caption("石器時代：荒野求生 v6 - 音效整合")
 
-        start_game = intro.play_intro()
+        display_manager = DisplayManager()
+        screen = display_manager.create_window()
+
+        start_game = intro.play_intro(
+            screen,
+            display_manager,
+        )
 
         if not start_game:
             pygame.quit()
             return
 
-        display_manager = DisplayManager()
-        screen = display_manager.create_window()
+        screen = pygame.display.get_surface()
         clock = pygame.time.Clock()
         fonts = create_fonts()
         
@@ -2956,11 +2979,17 @@ def main() -> None:
             completed_day = game.completed_day
             game.completed_day = None
 
-            day_transition.play_day_survived(completed_day)
+            day_transition.play_day_survived(
+                completed_day,
+                screen,
+                display_manager,
+            )
 
-            screen = display_manager.restore()
+            screen = pygame.display.get_surface()
 
-            pygame.display.set_caption("石器時代：荒野求生 v6 - 音效整合")
+            pygame.display.set_caption(
+                "石器時代：荒野求生 v6 - 音效整合"
+            )
 
         # =====================================================
         # 音效同步
@@ -3010,8 +3039,13 @@ def main() -> None:
             fire_loop_playing = False
             main_bgm_playing = False
 
-            action = game_over.play_game_over(game.death_reason)
-            screen = display_manager.restore()
+            action = game_over.play_game_over(
+                game.death_reason,
+                screen,
+                display_manager,
+            )
+
+            screen = pygame.display.get_surface()
 
             if action == "restart":
                 game = Game()

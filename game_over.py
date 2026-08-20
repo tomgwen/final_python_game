@@ -92,11 +92,51 @@ def play_adventure_bgm():
 # =========================================================
 # 主要播放函數
 # =========================================================
-def play_game_over(death_reason: str | None = None):
+def scale_to_cover(
+    image: pygame.Surface,
+    size: tuple[int, int],
+) -> pygame.Surface:
+    target_width, target_height = size
+    source_width, source_height = image.get_size()
+
+    scale = max(
+        target_width / source_width,
+        target_height / source_height,
+    )
+
+    scaled_width = max(1, int(source_width * scale))
+    scaled_height = max(1, int(source_height * scale))
+
+    scaled = pygame.transform.smoothscale(
+        image,
+        (scaled_width, scaled_height),
+    )
+
+    result = pygame.Surface(
+        (target_width, target_height)
+    )
+
+    x = (target_width - scaled_width) // 2
+    y = (target_height - scaled_height) // 2
+
+    result.blit(scaled, (x, y))
+
+    return result
+def play_game_over(
+    death_reason: str | None = None,
+    screen: pygame.Surface | None = None,
+    display_manager=None,
+):
     pygame.init()
-    pygame.mixer.init() 
-    
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+
+    if not pygame.mixer.get_init():
+        pygame.mixer.init()
+
+    if screen is None:
+        screen = pygame.display.set_mode(
+            (SCREEN_WIDTH, SCREEN_HEIGHT),
+            pygame.RESIZABLE,
+        )
     pygame.display.set_caption("石器時代：荒野求生 - 遊戲結束")
     clock = pygame.time.Clock()
     fonts = create_fonts()
@@ -105,8 +145,6 @@ def play_game_over(death_reason: str | None = None):
     forest_bg = load_forest_background()
     
     # 2. 建立夜幕圖層 (森林之上、其他元素之下)
-    night_tint = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-    night_tint.fill((20, 8, 8, 160))
 
     play_adventure_bgm()
 
@@ -114,18 +152,39 @@ def play_game_over(death_reason: str | None = None):
     action = "quit"
     running = True
 
-    CHAR_Y = SCREEN_HEIGHT // 2 + 80
-
     while running:
         current_time = pygame.time.get_ticks()
         elapsed = current_time - start_time
-        
+        width, height = screen.get_size()
+        center_x = width // 2
+        center_y = height // 2
+        char_y = int(height * 0.58)
+        width, height = screen.get_size()
+
+        center_x = width // 2
+        center_y = height // 2
+        char_y = int(height * 0.58)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
                 action = "quit"
             
             if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_F11:
+                    if display_manager is not None:
+                        screen = display_manager.toggle_fullscreen()
+                    continue
+
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                    action = "quit"
+
+                elif event.key in (
+                    pygame.K_RETURN,
+                    pygame.K_SPACE,
+                ):
+                    running = False
+                    action = "restart"
                 if event.key == pygame.K_ESCAPE:
                     running = False
                     action = "quit"
@@ -136,11 +195,38 @@ def play_game_over(death_reason: str | None = None):
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 running = False
                 action = "restart"
+            if event.type == pygame.VIDEORESIZE:
+                if display_manager is not None:
+                    screen = display_manager.resize(event.size)
+                else:
+                    screen = pygame.display.set_mode(
+                        event.size,
+                        pygame.RESIZABLE,
+                    )
+                continue
 
         # -----------------------------------------------------
         # 繪製圖層 (背景 -> 夜幕 -> 角色 -> 文字UI)
         # -----------------------------------------------------
-        screen.blit(forest_bg, (0, 0))
+        night_tint = pygame.Surface(
+            (width, height),
+            pygame.SRCALPHA,
+        )
+        night_tint.fill((20, 8, 8, 160))
+        current_forest_bg = scale_to_cover(
+            forest_bg,
+            (width, height),
+        )
+
+        current_forest_bg = scale_to_cover(
+            forest_bg,
+            (width, height),
+        )
+
+        screen.blit(
+            current_forest_bg,
+            (0, 0),
+        )
         screen.blit(night_tint, (0, 0))
 
         alpha = min(255, int((elapsed / 1500) * 255))
@@ -153,23 +239,35 @@ def play_game_over(death_reason: str | None = None):
             
         player_img = load_sprite("player_2.png", col, row, scale=130)
         if player_img:
-            p_rect = player_img.get_rect(center=(SCREEN_WIDTH // 2, CHAR_Y))
+            p_rect = player_img.get_rect(
+                center=(center_x, char_y)
+            )
             screen.blit(player_img, p_rect)
 
         # 4. 繪製醒目的純白色 GAME OVER 標題（帶有黑色微陰影，立體感十足）
-        title_surf = pygame.Surface((SCREEN_WIDTH, 120), pygame.SRCALPHA)
+        title_surf = pygame.Surface(
+            (width, 120),
+            pygame.SRCALPHA,
+        )
         
         shadow_txt = fonts["title"].render("GAME OVER", True, (0, 0, 0))
         main_txt = fonts["title"].render("GAME OVER", True, WHITE)
         
-        t_rect = main_txt.get_rect(center=(SCREEN_WIDTH // 2, 60))
-        s_rect = shadow_txt.get_rect(center=(SCREEN_WIDTH // 2 + 4, 64))
+        t_rect = main_txt.get_rect(
+            center=(center_x, 60)
+        )
+        s_rect = shadow_txt.get_rect(
+            center=(center_x + 4, 64)
+        )
         
         title_surf.blit(shadow_txt, s_rect)
         title_surf.blit(main_txt, t_rect)
         title_surf.set_alpha(alpha)
         
-        screen.blit(title_surf, (0, SCREEN_HEIGHT // 2 - 170))
+        screen.blit(
+            title_surf,
+            (0, center_y - 170),
+        )
 
         # 5. 下方字幕與操作提示
         if elapsed > 1000:
@@ -185,13 +283,24 @@ def play_game_over(death_reason: str | None = None):
                 True,
                 TEXT_COLOR,
             )
-            desc_rect = desc_txt.get_rect(center=(SCREEN_WIDTH // 2, CHAR_Y + 95))
+            desc_rect = desc_txt.get_rect(
+                center=(center_x, char_y + 95)
+            )
             
             prompt_txt = fonts["small"].render("按下 [Enter] 或 [滑鼠左鍵] 重新開始 | [Esc] 離開", True, GOLD_LIGHT)
-            prompt_rect = prompt_txt.get_rect(center=(SCREEN_WIDTH // 2, CHAR_Y + 155))
+            prompt_rect = prompt_txt.get_rect(
+                center=(center_x, char_y + 155)
+            )
             
             # 半透明背景框
-            box_rect = pygame.Rect(SCREEN_WIDTH // 2 - 340, CHAR_Y + 75, 680, 110)
+            box_width = min(680, width - 80)
+
+            box_rect = pygame.Rect(
+                center_x - box_width // 2,
+                char_y + 75,
+                box_width,
+                110,
+            )
             box_surf = pygame.Surface((box_rect.width, box_rect.height), pygame.SRCALPHA)
             box_surf.fill((0, 0, 0, 190))
             box_surf.set_alpha(sub_alpha)
@@ -206,7 +315,43 @@ def play_game_over(death_reason: str | None = None):
 
     pygame.mixer.music.fadeout(1000)
     return action
+def scale_to_cover(
+    image: pygame.Surface,
+    size: tuple[int, int],
+) -> pygame.Surface:
+    target_width, target_height = size
+    source_width, source_height = image.get_size()
 
+    scale = max(
+        target_width / source_width,
+        target_height / source_height,
+    )
+
+    scaled_width = max(
+        1,
+        int(source_width * scale),
+    )
+
+    scaled_height = max(
+        1,
+        int(source_height * scale),
+    )
+
+    scaled = pygame.transform.smoothscale(
+        image,
+        (scaled_width, scaled_height),
+    )
+
+    result = pygame.Surface(
+        (target_width, target_height)
+    )
+
+    x = (target_width - scaled_width) // 2
+    y = (target_height - scaled_height) // 2
+
+    result.blit(scaled, (x, y))
+
+    return result
 if __name__ == "__main__":
     result = play_game_over()
     print(f"[測試結果] 玩家選擇的動作是: {result}")

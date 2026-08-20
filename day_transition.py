@@ -39,14 +39,26 @@ def _font(size: int, bold: bool = False) -> pygame.font.Font:
     return font
 
 
-def play_day_survived(day_number: int) -> None:
+def play_day_survived(
+    day_number: int,
+    screen: pygame.Surface | None = None,
+    display_manager=None,
+) -> None:
     """Show a short, dismissible overlay for the day that just ended."""
+
     if day_number < 1:
         raise ValueError("day_number must be at least 1")
 
     pygame.init()
 
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    # 單獨執行 day_transition.py 時才自己建立視窗。
+    # 從 main.py 進來時直接沿用目前的 fullscreen / windowed surface。
+    if screen is None:
+        screen = pygame.display.set_mode(
+            (SCREEN_WIDTH, SCREEN_HEIGHT),
+            pygame.RESIZABLE,
+        )
+
     pygame.display.set_caption("石器時代：荒野求生 - 黎明")
 
     clock = pygame.time.Clock()
@@ -60,28 +72,70 @@ def play_day_survived(day_number: int) -> None:
     running = True
 
     while running:
-        elapsed = pygame.time.get_ticks() - start_time
+        current_time = pygame.time.get_ticks()
+        elapsed = current_time - start_time
 
         if elapsed >= DISPLAY_DURATION_MS:
             break
 
+        # =====================================================
+        # 事件處理
+        # =====================================================
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+                continue
 
-            elif event.type == pygame.KEYDOWN and event.key in (
-                pygame.K_SPACE,
-                pygame.K_RETURN,
-                pygame.K_ESCAPE,
+            if event.type == pygame.VIDEORESIZE:
+                if display_manager is not None:
+                    screen = display_manager.resize(event.size)
+                else:
+                    screen = pygame.display.set_mode(
+                        event.size,
+                        pygame.RESIZABLE,
+                    )
+                continue
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_F11:
+                    if display_manager is not None:
+                        screen = display_manager.toggle_fullscreen()
+                    continue
+
+                if event.key in (
+                    pygame.K_SPACE,
+                    pygame.K_RETURN,
+                    pygame.K_ESCAPE,
+                ):
+                    running = False
+                    continue
+
+            if (
+                event.type == pygame.MOUSEBUTTONDOWN
+                and event.button == 1
             ):
                 running = False
+                continue
 
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                running = False
+        # =====================================================
+        # 目前真正的畫面尺寸
+        # =====================================================
+        width, height = screen.get_size()
 
-        progress = min(1.0, elapsed / 700)
+        center_x = width // 2
+        center_y = height // 2
 
-        dawn = int(18 + 70 * progress)
+        # =====================================================
+        # 黎明背景
+        # =====================================================
+        progress = min(
+            1.0,
+            elapsed / 700,
+        )
+
+        dawn = int(
+            18 + 70 * progress
+        )
 
         screen.fill(
             (
@@ -91,20 +145,42 @@ def play_day_survived(day_number: int) -> None:
             )
         )
 
+        # =====================================================
+        # 下方日出光暈
+        # =====================================================
         glow = pygame.Surface(
-            (SCREEN_WIDTH, SCREEN_HEIGHT),
+            (width, height),
             pygame.SRCALPHA,
+        )
+
+        glow_radius = max(
+            430,
+            int(min(width, height) * 0.42),
         )
 
         pygame.draw.circle(
             glow,
-            (255, 196, 94, int(120 * progress)),
-            (SCREEN_WIDTH // 2, SCREEN_HEIGHT + 40),
-            430,
+            (
+                255,
+                196,
+                94,
+                int(120 * progress),
+            ),
+            (
+                center_x,
+                height + int(glow_radius * 0.1),
+            ),
+            glow_radius,
         )
 
-        screen.blit(glow, (0, 0))
+        screen.blit(
+            glow,
+            (0, 0),
+        )
 
+        # =====================================================
+        # 文字
+        # =====================================================
         title = title_font.render(
             f"DAY {day_number} SURVIVED",
             True,
@@ -118,7 +194,7 @@ def play_day_survived(day_number: int) -> None:
         )
 
         prompt = prompt_font.render(
-            "Space / 左鍵繼續  |  Esc 關閉",
+            "Space / 左鍵繼續  |  F11 全螢幕  |  Esc 關閉",
             True,
             (225, 218, 198),
         )
@@ -127,8 +203,8 @@ def play_day_survived(day_number: int) -> None:
             title,
             title.get_rect(
                 center=(
-                    SCREEN_WIDTH // 2,
-                    SCREEN_HEIGHT // 2 - 35,
+                    center_x,
+                    center_y - 35,
                 )
             ),
         )
@@ -137,8 +213,8 @@ def play_day_survived(day_number: int) -> None:
             body,
             body.get_rect(
                 center=(
-                    SCREEN_WIDTH // 2,
-                    SCREEN_HEIGHT // 2 + 35,
+                    center_x,
+                    center_y + 35,
                 )
             ),
         )
@@ -147,8 +223,8 @@ def play_day_survived(day_number: int) -> None:
             prompt,
             prompt.get_rect(
                 center=(
-                    SCREEN_WIDTH // 2,
-                    SCREEN_HEIGHT - 65,
+                    center_x,
+                    height - 65,
                 )
             ),
         )

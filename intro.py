@@ -107,188 +107,504 @@ def play_adventure_bgm():
 # =========================================================
 # 主要播放函數 (回傳 True 代表進入遊戲，False 代表關閉遊戲)
 # =========================================================
-def play_intro():
-    pygame.init()
-    pygame.mixer.init() 
-    
-    is_fullscreen = False
+def scale_to_cover(
+    image: pygame.Surface,
+    size: tuple[int, int],
+) -> pygame.Surface:
+    target_width, target_height = size
+    source_width, source_height = image.get_size()
 
-    screen = pygame.display.set_mode(
-        (SCREEN_WIDTH, SCREEN_HEIGHT),
-        pygame.RESIZABLE,
+    scale = max(
+        target_width / source_width,
+        target_height / source_height,
     )
+
+    scaled_width = max(
+        1,
+        int(source_width * scale),
+    )
+
+    scaled_height = max(
+        1,
+        int(source_height * scale),
+    )
+
+    scaled = pygame.transform.smoothscale(
+        image,
+        (
+            scaled_width,
+            scaled_height,
+        ),
+    )
+
+    result = pygame.Surface(
+        (
+            target_width,
+            target_height,
+        )
+    )
+
+    x = (
+        target_width
+        - scaled_width
+    ) // 2
+
+    y = (
+        target_height
+        - scaled_height
+    ) // 2
+
+    result.blit(
+        scaled,
+        (x, y),
+    )
+
+    return result
+def play_intro(
+    screen: pygame.Surface | None = None,
+    display_manager=None,
+):
+    pygame.init()
+
+    if not pygame.mixer.get_init():
+        pygame.mixer.init()
+
+    # 如果單獨執行 intro.py，才自己建立視窗。
+    # 從 main.py 進來時，會直接使用 DisplayManager 建立好的 screen。
+    if screen is None:
+        screen = pygame.display.set_mode(
+            (SCREEN_WIDTH, SCREEN_HEIGHT),
+            pygame.RESIZABLE,
+        )
+
     pygame.display.set_caption("石器時代：荒野求生")
+
     clock = pygame.time.Clock()
     fonts = create_fonts()
 
     forest_bg = load_forest_background()
-    night_tint = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-    night_tint.fill((10, 15, 25, 140))
 
-    phase = "story"      
+    phase = "story"
     page_index = 0
     state_start_time = pygame.time.get_ticks()
     bgm_started = False
-    
+
     FADE_IN_TIME = 1000
     HOLD_TIME = 3500
     FADE_OUT_TIME = 1000
-    TOTAL_PAGE_TIME = FADE_IN_TIME + HOLD_TIME + FADE_OUT_TIME
-    CHAR_Y = SCREEN_HEIGHT // 2 + 130 
+    TOTAL_PAGE_TIME = (
+        FADE_IN_TIME
+        + HOLD_TIME
+        + FADE_OUT_TIME
+    )
 
     running = True
-    start_game = False  # 預設為 False，只有在最後一頁按下確認才會變 True
+    start_game = False
 
     while running:
         current_time = pygame.time.get_ticks()
-        
-        # 事件處理 (支援滑鼠左鍵與空白鍵跳過)
+
+        # =====================================================
+        # 事件處理
+        # =====================================================
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-                if event.type == pygame.VIDEORESIZE and not is_fullscreen:
+                continue
+
+            # 視窗模式拖曳縮放
+            if event.type == pygame.VIDEORESIZE:
+                if display_manager is not None:
+                    screen = display_manager.resize(event.size)
+                else:
                     screen = pygame.display.set_mode(
                         event.size,
                         pygame.RESIZABLE,
                     )
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                continue
+
+            if event.type == pygame.KEYDOWN:
+                # F11 全螢幕
+                if event.key == pygame.K_F11:
+                    if display_manager is not None:
+                        screen = display_manager.toggle_fullscreen()
+                    continue
+
+                # ESC 離開
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                    continue
+
+                # Space / Enter 跳過目前階段
+                if event.key in (
+                    pygame.K_SPACE,
+                    pygame.K_RETURN,
+                ):
+                    if phase == "story":
+                        phase = "wakeup"
+                        state_start_time = current_time
+
+                    elif phase == "wakeup":
+                        phase = "done"
+
+                    elif phase == "done":
+                        start_game = True
+                        running = False
+
+                    continue
+
+            # 滑鼠左鍵跳過目前階段
+            if (
+                event.type == pygame.MOUSEBUTTONDOWN
+                and event.button == 1
+            ):
                 if phase == "story":
                     phase = "wakeup"
                     state_start_time = current_time
+
                 elif phase == "wakeup":
                     phase = "done"
+
                 elif phase == "done":
                     start_game = True
                     running = False
-            
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_F11:
-                    is_fullscreen = not is_fullscreen
 
-                    if is_fullscreen:
-                        screen = pygame.display.set_mode(
-                            (0, 0),
-                            pygame.FULLSCREEN,
-                        )
-                    else:
-                        screen = pygame.display.set_mode(
-                            (SCREEN_WIDTH, SCREEN_HEIGHT),
-                            pygame.RESIZABLE,
-                        )
+        # =====================================================
+        # 每一幀都取得目前真正的畫面尺寸
+        # =====================================================
+        width, height = screen.get_size()
 
-                elif event.key == pygame.K_ESCAPE:
-                    running = False
+        center_x = width // 2
+        center_y = height // 2
+        char_y = int(height * 0.58)
 
-                elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
-                                if phase == "story":
-                                    phase = "wakeup"
-                                    state_start_time = current_time
-                                elif phase == "wakeup":
-                                    phase = "done"
-                                elif phase == "done":
-                                    start_game = True
-                                    running = False
+        screen.fill(BLACK)
 
-                screen.fill(BLACK)
-
+        # =====================================================
+        # Story
+        # =====================================================
         if phase == "story":
             elapsed = current_time - state_start_time
+
             if elapsed < FADE_IN_TIME:
-                alpha = int((elapsed / FADE_IN_TIME) * 255)
+                alpha = int(
+                    (elapsed / FADE_IN_TIME) * 255
+                )
+
             elif elapsed < FADE_IN_TIME + HOLD_TIME:
                 alpha = 255
+
             elif elapsed < TOTAL_PAGE_TIME:
-                fade_out_elapsed = elapsed - (FADE_IN_TIME + HOLD_TIME)
-                alpha = 255 - int((fade_out_elapsed / FADE_OUT_TIME) * 255)
+                fade_out_elapsed = (
+                    elapsed
+                    - FADE_IN_TIME
+                    - HOLD_TIME
+                )
+
+                alpha = 255 - int(
+                    (fade_out_elapsed / FADE_OUT_TIME)
+                    * 255
+                )
+
             else:
                 alpha = 0
                 page_index += 1
                 state_start_time = current_time
+
                 if page_index >= len(STORY_PAGES):
                     phase = "wakeup"
                     state_start_time = current_time
 
             if page_index < len(STORY_PAGES):
                 lines = STORY_PAGES[page_index]
-                text_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-                start_y = SCREEN_HEIGHT // 2 - (len(lines) * 40) // 2
+
+                # 這裡不再使用固定 1280x700
+                text_surf = pygame.Surface(
+                    (width, height),
+                    pygame.SRCALPHA,
+                )
+
+                line_gap = 50
+                total_text_height = (
+                    len(lines) - 1
+                ) * line_gap
+
+                start_y = (
+                    center_y
+                    - total_text_height // 2
+                )
+
                 for i, line in enumerate(lines):
-                    color = GOLD_LIGHT if "阿強" in line else TEXT_COLOR
-                    txt_img = fonts["body"].render(line, True, color)
-                    rect = txt_img.get_rect(center=(SCREEN_WIDTH // 2, start_y + i * 50))
-                    text_surf.blit(txt_img, rect)
+                    color = (
+                        GOLD_LIGHT
+                        if "阿強" in line
+                        else TEXT_COLOR
+                    )
+
+                    txt_img = fonts["body"].render(
+                        line,
+                        True,
+                        color,
+                    )
+
+                    rect = txt_img.get_rect(
+                        center=(
+                            center_x,
+                            start_y + i * line_gap,
+                        )
+                    )
+
+                    text_surf.blit(
+                        txt_img,
+                        rect,
+                    )
+
                 text_surf.set_alpha(alpha)
                 screen.blit(text_surf, (0, 0))
 
+        # =====================================================
+        # Wakeup
+        # =====================================================
         elif phase == "wakeup":
             if not bgm_started:
                 play_adventure_bgm()
                 bgm_started = True
-            elapsed = current_time - state_start_time
-            screen.blit(forest_bg, (0, 0))
-            screen.blit(night_tint, (0, 0))
-            
+
+            elapsed = (
+                current_time
+                - state_start_time
+            )
+
+            current_forest_bg = scale_to_cover(
+                forest_bg,
+                (width, height),
+            )
+
+            screen.blit(
+                current_forest_bg,
+                (0, 0),
+            )
+
+            night_tint = pygame.Surface(
+                (width, height),
+                pygame.SRCALPHA,
+            )
+
+            night_tint.fill(
+                (10, 15, 25, 140)
+            )
+
+            screen.blit(
+                night_tint,
+                (0, 0),
+            )
+
             row = 9
             dialogue_text = ""
             dialogue_color = TEXT_COLOR
-            
+
             if elapsed < 2000:
                 col = 0
                 dialogue_text = "（風聲）呼—— 呼——"
+
             elif elapsed < 4000:
                 col = 1
                 dialogue_text = "「……這是哪裡？」"
+
             elif elapsed < 6000:
                 col = 2
                 dialogue_text = "「……這是哪裡？」"
+
             else:
-                row = 0; col = 0
-                dialogue_text = "「不管怎樣……我必須活下去。」"
+                row = 0
+                col = 0
+                dialogue_text = (
+                    "「不管怎樣……我必須活下去。」"
+                )
                 dialogue_color = GOLD_LIGHT
-                
-            player_img = load_sprite("player_2.png", col, row, scale=144)
+
+            player_img = load_sprite(
+                "player_2.png",
+                col,
+                row,
+                scale=144,
+            )
+
             if player_img:
-                screen.blit(player_img, player_img.get_rect(center=(SCREEN_WIDTH//2, CHAR_Y)))
-            
+                screen.blit(
+                    player_img,
+                    player_img.get_rect(
+                        center=(
+                            center_x,
+                            char_y,
+                        )
+                    ),
+                )
+
             if dialogue_text:
-                fade_alpha = min(255, int(((elapsed % 2000) / 500) * 255)) if elapsed < 6000 else min(255, int(((elapsed - 6000) / 800) * 255))
-                dialogue = fonts["body"].render(dialogue_text, True, dialogue_color)
-                dialogue.set_alpha(fade_alpha)
-                screen.blit(dialogue, dialogue.get_rect(center=(SCREEN_WIDTH//2, CHAR_Y + 90)))
+                if elapsed < 6000:
+                    fade_alpha = min(
+                        255,
+                        int(
+                            (
+                                (elapsed % 2000)
+                                / 500
+                            )
+                            * 255
+                        ),
+                    )
+
+                else:
+                    fade_alpha = min(
+                        255,
+                        int(
+                            (
+                                (elapsed - 6000)
+                                / 800
+                            )
+                            * 255
+                        ),
+                    )
+
+                dialogue = fonts["body"].render(
+                    dialogue_text,
+                    True,
+                    dialogue_color,
+                )
+
+                dialogue.set_alpha(
+                    fade_alpha
+                )
+
+                screen.blit(
+                    dialogue,
+                    dialogue.get_rect(
+                        center=(
+                            center_x,
+                            char_y + 90,
+                        )
+                    ),
+                )
+
             if elapsed >= 9000:
                 phase = "done"
 
+        # =====================================================
+        # Done
+        # =====================================================
         elif phase == "done":
             if not bgm_started:
                 play_adventure_bgm()
                 bgm_started = True
-            screen.blit(forest_bg, (0, 0))
-            screen.blit(night_tint, (0, 0))
-            
-            player_img = load_sprite("player_2.png", 0, 0, scale=144)
+
+            current_forest_bg = scale_to_cover(
+                forest_bg,
+                (width, height),
+            )
+
+            screen.blit(
+                current_forest_bg,
+                (0, 0),
+            )
+
+            night_tint = pygame.Surface(
+                (width, height),
+                pygame.SRCALPHA,
+            )
+
+            night_tint.fill(
+                (10, 15, 25, 140)
+            )
+
+            screen.blit(
+                night_tint,
+                (0, 0),
+            )
+
+            player_img = load_sprite(
+                "player_2.png",
+                0,
+                0,
+                scale=144,
+            )
+
             if player_img:
-                screen.blit(player_img, player_img.get_rect(center=(SCREEN_WIDTH//2, CHAR_Y)))
+                screen.blit(
+                    player_img,
+                    player_img.get_rect(
+                        center=(
+                            center_x,
+                            char_y,
+                        )
+                    ),
+                )
 
-            txt = fonts["title"].render("按下 [Enter] 或 [滑鼠左鍵] 開始荒野求生", True, GOLD_LIGHT)
-            bg_rect = txt.get_rect(center=(SCREEN_WIDTH//2, CHAR_Y + 110))
-            bg_surface = pygame.Surface((bg_rect.width + 40, bg_rect.height + 20), pygame.SRCALPHA)
-            bg_surface.fill((0, 0, 0, 180))
-            screen.blit(bg_surface, (bg_rect.x - 20, bg_rect.y - 10))
+            txt = fonts["title"].render(
+                "按下 [Enter] 或 [滑鼠左鍵] 開始荒野求生",
+                True,
+                GOLD_LIGHT,
+            )
+
+            bg_rect = txt.get_rect(
+                center=(
+                    center_x,
+                    char_y + 110,
+                )
+            )
+
+            bg_surface = pygame.Surface(
+                (
+                    bg_rect.width + 40,
+                    bg_rect.height + 20,
+                ),
+                pygame.SRCALPHA,
+            )
+
+            bg_surface.fill(
+                (0, 0, 0, 180)
+            )
+
+            screen.blit(
+                bg_surface,
+                (
+                    bg_rect.x - 20,
+                    bg_rect.y - 10,
+                ),
+            )
+
             if current_time % 1200 < 600:
-                screen.blit(txt, bg_rect)
+                screen.blit(
+                    txt,
+                    bg_rect,
+                )
 
-        skip_txt = fonts["small"].render("按 [左鍵] 或 [Space] 跳過 | [Esc] 關閉", True, (150, 150, 150))
-        screen.blit(skip_txt, (SCREEN_WIDTH - 300, SCREEN_HEIGHT - 40))
+        # =====================================================
+        # 右下角提示
+        # =====================================================
+        skip_txt = fonts["small"].render(
+            "按 [左鍵] 或 [Space] 跳過 | [F11] 全螢幕 | [Esc] 關閉",
+            True,
+            (150, 150, 150),
+        )
+
+        skip_rect = skip_txt.get_rect(
+            bottomright=(
+                width - 30,
+                height - 25,
+            )
+        )
+
+        screen.blit(
+            skip_txt,
+            skip_rect,
+        )
 
         pygame.display.flip()
         clock.tick(FPS)
 
-    # 動畫結束，音樂平滑淡出
     pygame.mixer.music.fadeout(1500)
-    
-    # 回傳玩家的選擇 (True: 開始遊戲, False: 關閉遊戲)
-    return start_game
 
+    return start_game
 # 只有在直接執行 intro.py 時才會觸發這裡 (方便單獨測試)
 if __name__ == "__main__":
     play_intro()
