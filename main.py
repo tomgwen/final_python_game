@@ -44,6 +44,7 @@ from constants import (
     MAP_ROWS,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
+    TOOL_MAX_DURABILITY,
 )
 from enemy import (
     calculate_player_damage,
@@ -106,6 +107,20 @@ RESOURCE_NAMES = {
     "wood": "木材",
     "stone": "石頭",
     "hide": "獸皮",
+}
+
+TOOL_NAMES = {
+    "spear": "石矛",
+    "axe": "石斧",
+    "pickaxe": "石鎬",
+    "bow": "弓",
+}
+
+TOOL_OWNERSHIP_ATTRS = {
+    "spear": "has_spear",
+    "axe": "has_axe",
+    "pickaxe": "has_pickaxe",
+    "bow": "has_bow",
 }
 
 # =========================================================
@@ -342,6 +357,15 @@ class Game:
         self.has_spear = False
         self.has_axe = False
         self.has_pickaxe = False
+        self.has_bow = False
+
+        self.tool_durability = {
+            "spear": 0,
+            "axe": 0,
+            "pickaxe": 0,
+            "bow": 0,
+        }
+
         self.enemies = []
 
         # =====================================================
@@ -363,7 +387,60 @@ class Game:
             "你在石器時代的荒野中醒來。",
             "白天共有 20 回合。右鍵點地圖格開始行動。",
         ]
+    def owns_tool(self, tool_name: str) -> bool:
+        """Return whether the player currently owns a tool."""
+        attr_name = TOOL_OWNERSHIP_ATTRS.get(tool_name)
 
+        if attr_name is None:
+            return False
+
+        return bool(getattr(self, attr_name, False))
+
+
+    def get_tool_durability(self, tool_name: str) -> int:
+        """Return the current durability of a known tool."""
+        return self.tool_durability.get(tool_name, 0)
+
+
+    def set_tool_owned(self, tool_name: str, owned: bool) -> None:
+        """Set tool ownership while keeping durability consistent."""
+        attr_name = TOOL_OWNERSHIP_ATTRS.get(tool_name)
+
+        if attr_name is None:
+            raise ValueError(f"Unknown tool: {tool_name}")
+
+        setattr(self, attr_name, owned)
+
+        if owned:
+            self.tool_durability[tool_name] = TOOL_MAX_DURABILITY
+        else:
+            self.tool_durability[tool_name] = 0
+
+
+    def use_tool(self, tool_name: str) -> bool:
+        """Consume one durability point after a successful tool use."""
+        attr_name = TOOL_OWNERSHIP_ATTRS.get(tool_name)
+
+        if attr_name is None:
+            raise ValueError(f"Unknown tool: {tool_name}")
+
+        if not getattr(self, attr_name, False):
+            return False
+
+        # 相容舊測試與舊程式：
+        # 過去有些地方會直接寫 game.has_axe = True。
+        # 若工具存在但沒有耐久資料，首次使用時視為完整耐久。
+        if self.tool_durability.get(tool_name, 0) <= 0:
+            self.tool_durability[tool_name] = TOOL_MAX_DURABILITY
+
+        self.tool_durability[tool_name] -= 1
+
+        if self.tool_durability[tool_name] <= 0:
+            self.tool_durability[tool_name] = 0
+            setattr(self, attr_name, False)
+            self.log(f"{TOOL_NAMES[tool_name]}損毀了！")
+
+        return True
     def campfire_at(self, tile: tuple[int, int]) -> Campfire | None:
         """Return the campfire at tile, if one exists."""
         return self.campfires.get(tile)
@@ -574,10 +651,15 @@ class Game:
             
         resource = self.resource_type_at(tile)
         amount = 1
+        used_tool = None
+
         if resource == "wood" and self.has_axe:
             amount = 2
+            used_tool = "axe"
         elif resource == "stone" and self.has_pickaxe:
             amount = 2
+            used_tool = "pickaxe"
+
         amount = min(amount, self.resources[tile])
         
         self.resources[tile] -= amount
@@ -586,6 +668,10 @@ class Game:
             self.resource_depleted_day[tile] = self.day
 
         self.inventory.add(resource, amount)
+
+        if used_tool is not None:
+            self.use_tool(used_tool)
+
         self.log(f"採集到 {amount} 個{RESOURCE_NAMES[resource]}。")
         
         # 先扣除白天回合
@@ -719,7 +805,7 @@ class Game:
         if not self.inventory.spend({"wood": 2, "stone": 1}):
             self.log("石矛需要 2 木材 + 1 石頭。")
             return False
-        self.has_spear = True
+        self.set_tool_owned("spear", True)
         self.log("製作石矛成功！攻擊力提升。")
         self.spend_day_turn()
         return True
@@ -733,7 +819,7 @@ class Game:
         if not self.inventory.spend({"wood": 1, "stone": 2}):
             self.log("石斧需要 1 木材 + 2 石頭。")
             return False
-        self.has_axe = True
+        self.set_tool_owned("axe", True)
         self.log("製作石斧成功！採木效率提升。")
         self.spend_day_turn()
         return True
@@ -747,7 +833,7 @@ class Game:
         if not self.inventory.spend({"wood": 2, "stone": 2}):
             self.log("石鎬需要 2 木材 + 2 石頭。")
             return False
-        self.has_pickaxe = True
+        self.set_tool_owned("pickaxe", True)
         self.log("製作石鎬成功！採石效率提升。")
         self.spend_day_turn()
         return True
@@ -931,8 +1017,13 @@ class Game:
             return
 
         # 實際傷害結算
-        damage = calculate_player_damage(self.has_spear)
+        used_spear = self.has_spear
+
+        damage = calculate_player_damage(used_spear)
         defeated = damage_enemy(enemy, damage)
+
+        if used_spear:
+            self.use_tool("spear")
 
         name = "狼" if enemy.enemy_type == ENEMY_WOLF else "野豬"
         self.log(f"你攻擊{name}，造成 {damage} 點傷害。")
