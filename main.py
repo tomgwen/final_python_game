@@ -15,6 +15,8 @@ import math
 import os
 import random
 from treasure import TreasureChest, generate_chest_contents
+import inventory_ui
+import icon_manager
 import intro
 import game_over
 import day_transition
@@ -2233,6 +2235,7 @@ def draw_game(
     context_origin,
     drag_path=None,
     recipe_open=False,
+    inventory_open=False,
     visual_mgr=None,
     anim_timer=0,
     notification_manager=None,
@@ -2557,8 +2560,12 @@ def draw_game(
     if context_tile is not None and not recipe_open:
         draw_context_menu(screen, fonts, game, context_tile, context_origin)
         
-    if recipe_open:
-        draw_recipe_modal(screen, fonts)
+    if inventory_open:
+        inventory_ui.draw_inventory_modal(
+            screen,
+            fonts,
+            game,
+        )
 
     if notification_manager is not None:
         notification_manager.draw(screen, fonts, viewport)
@@ -2761,6 +2768,7 @@ def main() -> None:
     dragging_player = False
     drag_path = None
     recipe_open = False
+    inventory_open = False
     anim_timer = 0
     
     last_phase = game.phase
@@ -2796,12 +2804,20 @@ def main() -> None:
                     if view == "game":
                         if recipe_open:
                             recipe_open = False
+                        elif inventory_open:
+                            inventory_open = False
                         elif context_tile is not None:
                             context_tile = None
                         else:
                             running = False
                     else:
                         running = False
+                elif event.key == pygame.K_i and view == "game":
+                    inventory_open = not inventory_open
+                    recipe_open = False
+                    context_tile = None
+                    dragging_player = False
+                    continue
                 elif event.key == pygame.K_h and view == "game":
                     view = "tutorial"
                     tutorial_page = 0
@@ -2893,7 +2909,7 @@ def main() -> None:
                     drag_path = None
                     continue
 
-                if recipe_open:
+                if recipe_open or inventory_open:
                     if event.button == 1 and recipe_close_rect().collidepoint(mouse):
                         audio.play_sfx("click")
                         recipe_open = False
@@ -3108,6 +3124,7 @@ def main() -> None:
                 context_origin,
                 drag_path,
                 recipe_open,
+                inventory_open,
                 visual_mgr,
                 anim_timer,
                 notification_manager,
