@@ -39,6 +39,9 @@ from constants import (
     CAMP_POSITION,
     ENEMY_BOAR,
     ENEMY_WOLF,
+    ENEMY_HYENA,
+    ENEMY_BEAR,
+    ENEMY_SABERTOOTH,
     FPS,
     MAP_COLS,
     MAP_ROWS,
@@ -51,6 +54,10 @@ from enemy import (
     claim_loot,
     create_enemy,
     damage_enemy,
+    available_enemy_types,
+    get_enemy_max_health,
+    get_enemy_name,
+    get_enemy_wall_damage,
 )
 from inventory import Inventory
 from pathfinding import find_hex_path
@@ -949,14 +956,35 @@ class Game:
         self.night_turns_left = NIGHT_TURNS
         self.spawn_enemies()
         
-        wolves = sum(1 for enemy in self.enemies if enemy.enemy_type == ENEMY_WOLF)
-        boars = sum(1 for enemy in self.enemies if enemy.enemy_type == ENEMY_BOAR)
-        self.log(f"夜晚開始：{wolves} 隻狼、{boars} 隻野豬從營地外圍的荒野中出現！")
+        enemy_summary: list[str] = []
 
+        for enemy_type in available_enemy_types(self.day):
+            count = sum(
+                1
+                for enemy in self.enemies
+                if enemy.enemy_type == enemy_type
+            )
+
+            if count > 0:
+                enemy_summary.append(
+                    f"{count} 隻{get_enemy_name(enemy_type)}"
+                )
+
+        summary_text = "、".join(enemy_summary)
+
+        self.log(
+            f"夜晚開始：{summary_text}從營地外圍的荒野中出現！"
+        )
     def spawn_enemies(self) -> None:
-        wolf_count = min(3 + self.day, 7)
-        boar_count = 0 if self.day < 2 else min(1 + (self.day - 2) // 2, 3)
-        total = wolf_count + boar_count
+        enemy_counts = {
+            ENEMY_WOLF: min(3 + self.day, 7),
+            ENEMY_BOAR: 0 if self.day < 2 else min(1 + (self.day - 2) // 2, 3),
+            ENEMY_HYENA: 0 if self.day < 4 else min(1 + (self.day - 4) // 2, 3),
+            ENEMY_BEAR: 0 if self.day < 6 else min(1 + (self.day - 6) // 3, 2),
+            ENEMY_SABERTOOTH: 0 if self.day < 9 else min(1 + (self.day - 9) // 4, 2),
+        }
+
+        total = sum(enemy_counts.values())
 
         spawn_min_distance = 6
         spawn_max_distance = 9
@@ -996,23 +1024,22 @@ class Game:
         self.enemies = []
         index = 0
 
-        for _ in range(wolf_count):
-            self.enemies.append(
-                create_enemy(
-                    ENEMY_WOLF,
-                    positions[index],
-                )
-            )
-            index += 1
+        index = 0
 
-        for _ in range(boar_count):
-            self.enemies.append(
-                create_enemy(
-                    ENEMY_BOAR,
-                    positions[index],
+        for enemy_type in available_enemy_types(self.day):
+            count = enemy_counts.get(enemy_type, 0)
+
+            for _ in range(count):
+                if index >= len(positions):
+                    return
+
+                self.enemies.append(
+                    create_enemy(
+                        enemy_type,
+                        positions[index],
+                    )
                 )
-            )
-            index += 1
+                index += 1
 
     def alive_enemies(self):
         return [enemy for enemy in self.enemies if enemy.alive]
@@ -1107,7 +1134,7 @@ class Game:
         if used_spear:
             self.use_tool("spear")
 
-        name = "狼" if enemy.enemy_type == ENEMY_WOLF else "野豬"
+        name = get_enemy_name(enemy.enemy_type)
         self.log(f"你攻擊{name}，造成 {damage} 點傷害。")
 
         if defeated:
@@ -1174,7 +1201,7 @@ class Game:
 
             defeated = damage_enemy(enemy, 2)
 
-            name = "野豬" if enemy.enemy_type == ENEMY_BOAR else "狼"
+            name = get_enemy_name(enemy.enemy_type)
             self.log(f"{name}受到營火灼熱影響，失去 2 HP。")
 
             if defeated:
@@ -1277,7 +1304,7 @@ class Game:
             if candidate_distance >= current_distance:
                 continue
             if (
-                enemy.enemy_type == ENEMY_WOLF
+                enemy.fear_of_fire
                 and self.is_in_lit_campfire_range(candidate)
             ):
                 continue
@@ -1297,11 +1324,11 @@ class Game:
         
         building = self.buildings.get_building(target)
         if building is not None and building.building_type == BUILD_WALL:
-            wall_damage = 25 if enemy.enemy_type == ENEMY_BOAR else 10
+            wall_damage = get_enemy_wall_damage(enemy.enemy_type)
             position = building.position
             self.buildings.damage_building(position, wall_damage)
             
-            name = "野豬" if enemy.enemy_type == ENEMY_BOAR else "狼"
+            name = get_enemy_name(enemy.enemy_type)
             remaining = self.buildings.get_building(position)
             if remaining is None:
                 self.log(f"{name}摧毀了 {position} 的木牆！")
@@ -1314,7 +1341,7 @@ class Game:
         if building is not None and building.building_type == BUILD_TRAP and building.active:
             if self.buildings.trigger_trap(target):
                 defeated = damage_enemy(enemy, 25)
-                name = "野豬" if enemy.enemy_type == ENEMY_BOAR else "狼"
+                name = get_enemy_name(enemy.enemy_type)
                 self.log(f"{name}踩中陷阱，受到 25 點傷害！")
                 if defeated:
                     self.collect_loot(enemy)
@@ -1325,7 +1352,7 @@ class Game:
 
     def enemy_attack_player(self, enemy) -> None:
         health_lost = self.survival.take_damage(enemy.damage)
-        name = "野豬" if enemy.enemy_type == ENEMY_BOAR else "狼"
+        name = get_enemy_name(enemy.enemy_type)
 
         if enemy.position == self.player:
             self.log(f"{name}撲向你！生命損失 {health_lost}。")
@@ -1337,6 +1364,9 @@ class Game:
                 self.death_reason = DEATH_REASON_WOLF
             elif enemy.enemy_type == ENEMY_BOAR:
                 self.death_reason = DEATH_REASON_BOAR
+            else:
+                name = get_enemy_name(enemy.enemy_type)
+                self.death_reason = f"你遭到{name}攻擊而死亡。"
 
     def finish_night(self) -> None:
         completed_day = self.day
@@ -2288,10 +2318,12 @@ def draw_game(
         for index, enemy in enumerate(enemies[:3]):
             offset_x = (index - 1) * 12 if len(enemies) > 1 else 0
             center = (base_x + offset_x, base_y - 3)
-            max_hp = 30 if enemy.enemy_type == ENEMY_WOLF else 55
+            max_hp = get_enemy_max_health(enemy.enemy_type)
             
             if enemy.enemy_type == ENEMY_WOLF:
                 draw_wolf(screen, center, enemy.health, max_hp)
+            elif enemy.enemy_type == ENEMY_BOAR:
+                draw_boar(screen, center, enemy.health, max_hp)
             else:
                 draw_boar(screen, center, enemy.health, max_hp)
                 
