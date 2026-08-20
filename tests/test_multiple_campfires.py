@@ -72,6 +72,9 @@ def get_valid_campfire_build_tile(game: Game) -> tuple[int, int]:
             tile != CAMP_POSITION
             and game.terrain[tile] != "water"
             and hex_distance(game.player, tile) <= 2
+            and game.campfire_at(tile) is None
+            and game.buildings.get_building(tile) is None
+            and game.treasure_chest_at(tile) is None
         ):
             game.discovered.add(tile)
             return tile

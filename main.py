@@ -1505,7 +1505,16 @@ class Game:
             campfire = self.campfire_at(tile)
 
             if campfire is not None:
-                fire_label = "補充 1 木材" if campfire.lit else "重新點燃"
+                if campfire.lit:
+                    fire_label = (
+                        f"補充 1 木材｜燃料 "
+                        f"{campfire.fuel}/{CAMPFIRE_MAX_FUEL}"
+                    )
+                else:
+                    fire_label = (
+                        f"重新點燃｜燃料 "
+                        f"{campfire.fuel}/{CAMPFIRE_MAX_FUEL}"
+                    )
                 actions.append(
                     (
                         "fire",
@@ -1555,7 +1564,16 @@ class Game:
             campfire = self.campfire_at(tile)
 
             if campfire is not None:
-                fire_label = "補充 1 木材" if campfire.lit else "重新點燃"
+                if campfire.lit:
+                    fire_label = (
+                        f"補充 1 木材｜燃料 "
+                        f"{campfire.fuel}/{CAMPFIRE_MAX_FUEL}"
+                    )
+                else:
+                    fire_label = (
+                        f"重新點燃｜燃料 "
+                        f"{campfire.fuel}/{CAMPFIRE_MAX_FUEL}"
+                    )
                 actions.append(
                     (
                         "fire",
@@ -2397,8 +2415,8 @@ def draw_game(
         if tile == game.selected_tile:
             pygame.draw.polygon(screen, GOLD_LIGHT, points, 3)
     # =====================================================
-# 寶箱
-# =====================================================
+    # 寶箱
+    # =====================================================
     for chest in game.treasure_chests.values():
         if chest.position not in game.discovered:
             continue
