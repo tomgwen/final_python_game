@@ -20,7 +20,9 @@ def test_generated_chest_contents_are_positive():
 def test_generated_chest_contents_only_use_known_resources():
     contents = generate_chest_contents(random.Random(123))
 
-    assert set(contents).issubset({"food", "wood", "stone", "hide"})
+    assert set(contents).issubset(
+        {"food", "wood", "stone", "hide", "arrow"}
+    )
 
 
 def test_game_generates_six_treasure_chests():
@@ -203,3 +205,8 @@ def test_treasure_action_disabled_during_attack_animation():
 
     assert action is not None
     assert action[2] is False
+def test_generated_chest_never_has_more_than_four_reward_types():
+    for seed in range(50):
+        contents = generate_chest_contents(random.Random(seed))
+
+        assert 2 <= len(contents) <= 4

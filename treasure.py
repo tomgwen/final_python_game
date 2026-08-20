@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import random
-
+from constants import RESOURCE_ARROW
 
 @dataclass
 class TreasureChest:
@@ -18,9 +18,10 @@ def generate_chest_contents(rng: random.Random | None = None) -> dict[str, int]:
         "wood": (6, 12),
         "stone": (4, 10),
         "hide": (2, 6),
+        RESOURCE_ARROW: (3, 8),
     }
 
-    reward_count = rng.randint(2, len(possible_rewards))
+    reward_count = rng.randint(2, 4)
     selected = rng.sample(list(possible_rewards.keys()), reward_count)
 
     contents: dict[str, int] = {}

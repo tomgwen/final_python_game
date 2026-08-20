@@ -37,6 +37,8 @@ from constants import (
     BUILD_WALL,
     CAMPFIRE_MAX_FUEL,
     CAMP_POSITION,
+    RESOURCE_ARROW,
+    PLAYER_BOW_DAMAGE,
     ENEMY_BOAR,
     ENEMY_WOLF,
     ENEMY_HYENA,
@@ -386,7 +388,7 @@ class Game:
         self.attack_anim_row = 6
         self.attack_target = None
         self.attack_enemy = None
-
+        self.attack_weapon = None
         self.floating_icon_type = None
         self.floating_icon_tile = None
         self.floating_icon_amount = 0
@@ -926,7 +928,34 @@ class Game:
         self.log("製作石鎬成功！採石效率提升。")
         self.spend_day_turn()
         return True
+    def craft_bow(self) -> bool:
+        if self.phase != "day":
+            return False
 
+        if self.has_bow:
+            self.log("你已經擁有弓。")
+            return False
+
+        if not self.inventory.spend({"wood": 2, "hide": 1}):
+            self.log("弓需要 2 木材 + 1 獸皮。")
+            return False
+
+        self.set_tool_owned("bow", True)
+        self.log("製作弓成功！可以使用箭矢進行遠程攻擊。")
+        self.spend_day_turn()
+        return True
+    def craft_arrows(self) -> bool:
+        if self.phase != "day":
+            return False
+
+        if not self.inventory.spend({"wood": 1, "stone": 1}):
+            self.log("箭矢需要 1 木材 + 1 石頭。")
+            return False
+
+        self.inventory.add(RESOURCE_ARROW, 5)
+        self.log("製作箭矢成功！獲得 5 支箭。")
+        self.spend_day_turn()
+        return True
     def craft_armor(self) -> bool:
         if self.phase != "day":
             return False
@@ -1064,6 +1093,31 @@ class Game:
     # =====================================================
     # 玩家攻擊 (只負責設定動畫狀態)
     # =====================================================
+    def attack_weapon_for_tile(
+        self,
+        tile: tuple[int, int],
+    ) -> str | None:
+        """Choose the weapon used to attack a tile."""
+
+        distance = hex_distance(self.player, tile)
+
+        # 近距離優先使用石矛，不浪費箭矢。
+        if self.has_spear and distance <= 2:
+            return "spear"
+
+        # 徒手只能攻擊相鄰一格。
+        if distance <= 1:
+            return "unarmed"
+
+        # 超過近戰距離後，才使用弓箭。
+        if (
+            self.has_bow
+            and self.inventory.get(RESOURCE_ARROW) > 0
+            and distance <= 3
+        ):
+            return "bow"
+
+        return None
     def attack_enemy_at(self, tile: tuple[int, int]) -> bool:
         if self.phase != "night":
             return False
@@ -1076,9 +1130,20 @@ class Game:
             self.log("這個格子沒有可以攻擊的敵人。")
             return False
 
-        attack_range = 2 if self.has_spear else 1
-        if hex_distance(self.player, tile) > attack_range:
-            self.log(f"敵人距離太遠；目前攻擊距離為 {attack_range} 格。")
+        attack_weapon = self.attack_weapon_for_tile(tile)
+
+        if attack_weapon is None:
+            distance = hex_distance(self.player, tile)
+
+            if (
+                self.has_bow
+                and distance <= 3
+                and self.inventory.get(RESOURCE_ARROW) <= 0
+            ):
+                self.log("你沒有箭矢，無法進行遠程攻擊。")
+            else:
+                self.log("敵人距離太遠，無法攻擊。")
+
             return False
 
         enemy = enemies[0]
@@ -1099,6 +1164,7 @@ class Game:
         # 記錄本次攻擊狀態（正式進入攻擊狀態）
         self.attack_target = tile
         self.attack_enemy = enemy
+        self.attack_weapon = attack_weapon
         self.attack_animating = True
         self.attack_frame = 0
         self.attack_anim_start_time = pygame.time.get_ticks()
@@ -1113,29 +1179,44 @@ class Game:
             return
 
         enemy = self.attack_enemy
-        
+        attack_weapon = self.attack_weapon
         # 清除攻擊動畫狀態
         self.attack_animating = False
         self.attack_anim_start_time = 0
         self.attack_frame = 0
         self.attack_target = None
         self.attack_enemy = None
+        self.attack_weapon = None
         
         # 防呆：如果是砍樹 (enemy 為 None)，動畫播完直接結束，不結算傷害
         if enemy is None:
             return
 
         # 實際傷害結算
-        used_spear = self.has_spear
+        if attack_weapon == "bow":
+            damage = PLAYER_BOW_DAMAGE
 
-        damage = calculate_player_damage(used_spear)
+        elif attack_weapon == "spear":
+            damage = calculate_player_damage(True)
+
+        else:
+            damage = calculate_player_damage(False)
+
         defeated = damage_enemy(enemy, damage)
 
-        if used_spear:
+        if attack_weapon == "bow":
+            self.inventory.spend({RESOURCE_ARROW: 1})
+            self.use_tool("bow")
+
+        elif attack_weapon == "spear":
             self.use_tool("spear")
 
         name = get_enemy_name(enemy.enemy_type)
-        self.log(f"你攻擊{name}，造成 {damage} 點傷害。")
+
+        if attack_weapon == "bow":
+            self.log(f"你射箭攻擊{name}，造成 {damage} 點傷害。")
+        else:
+            self.log(f"你攻擊{name}，造成 {damage} 點傷害。")
 
         if defeated:
             self.collect_loot(enemy)
@@ -1447,11 +1528,11 @@ class Game:
             return actions
         if self.phase == "night":
             enemies = self.enemies_at(tile)
-            attack_range = 2 if self.has_spear else 1
+            attack_weapon = self.attack_weapon_for_tile(tile)
 
             can_attack = (
                 bool(enemies)
-                and hex_distance(self.player, tile) <= attack_range
+                and attack_weapon is not None
                 and not self.attack_animating
             )
 
@@ -1969,6 +2050,10 @@ def execute_hud_action(game: Game, action: str) -> None:
         game.craft_axe()
     elif action == "pickaxe":
         game.craft_pickaxe()
+    elif action == "bow":
+        game.craft_bow()
+    elif action == "arrows":
+        game.craft_arrows()
     elif action == "armor":
         game.craft_armor()
     elif action == "fire_night":

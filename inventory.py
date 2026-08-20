@@ -1,6 +1,7 @@
 """Inventory system for Stone Age Survival."""
 
 from constants import (
+    RESOURCE_ARROW,
     RESOURCE_FOOD,
     RESOURCE_HIDE,
     RESOURCE_STONE,
@@ -12,10 +13,11 @@ class Inventory:
     """Store and manage the player's shared resources."""
 
     _VALID_RESOURCES = {
-        RESOURCE_FOOD,
-        RESOURCE_WOOD,
-        RESOURCE_STONE,
-        RESOURCE_HIDE,
+    RESOURCE_FOOD,
+    RESOURCE_WOOD,
+    RESOURCE_STONE,
+    RESOURCE_HIDE,
+    RESOURCE_ARROW,
     }
 
     def __init__(self) -> None:
@@ -25,6 +27,7 @@ class Inventory:
             RESOURCE_WOOD: 5,
             RESOURCE_STONE: 2,
             RESOURCE_HIDE: 0,
+            RESOURCE_ARROW: 0,
         }
 
     def _validate_resource(self, resource: str) -> None:

@@ -23,7 +23,7 @@ def test_recipe_modal_close_button_is_inside_modal():
 
 
 def test_recipe_modal_has_all_catalog_items():
-    assert len(RECIPE_CATALOG) == 6
+    assert len(RECIPE_CATALOG) == 8
 
     names = [
         recipe["name"]
@@ -33,6 +33,8 @@ def test_recipe_modal_has_all_catalog_items():
     assert names == [
         "石矛",
         "石斧",
+        "弓",
+        "箭矢 x5",
         "獸皮護甲",
         "石鎬",
         "木牆",

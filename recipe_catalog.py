@@ -31,6 +31,28 @@ RECIPE_CATALOG = [
         "effect": "採集木材時，每次最多獲得 2 木材",
     },
     {
+        "id": "bow",
+        "name": "弓",
+        "category": "裝備",
+        "cost": {
+            "wood": 2,
+            "hide": 1,
+        },
+        "cost_text": "木材 x2、獸皮 x1",
+        "effect": "可使用箭矢攻擊最遠 3 格的敵人",
+    },
+    {
+        "id": "arrows",
+        "name": "箭矢 x5",
+        "category": "裝備",
+        "cost": {
+            "wood": 1,
+            "stone": 1,
+        },
+        "cost_text": "木材 x1、石頭 x1",
+        "effect": "製作 5 支箭，使用弓攻擊時消耗",
+    },
+    {
         "id": "armor",
         "name": "獸皮護甲",
         "category": "裝備",
