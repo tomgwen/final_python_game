@@ -1,10 +1,10 @@
 from hex_map import HexMap
-from constants import CAMP_POSITION, TERRAIN_GRASS
+from constants import CAMP_POSITION, TERRAIN_GRASS, MAP_COLS, MAP_ROWS
 
 def test_hex_map():
     hm = HexMap(seed=42)
     tiles = hm.get_all_tiles()
-    assert len(tiles) == 88 # 11x8
+    assert len(tiles) == MAP_COLS * MAP_ROWS
     
     camp = hm.get_tile(*CAMP_POSITION)
     assert camp is not None

@@ -57,11 +57,48 @@ class SurvivalStats:
         return True
 
     def apply_daily_hunger(self) -> None:
-        """Increase daily hunger and apply starvation damage if necessary."""
+        """
+        Increase hunger once per day.
+
+        Health damage is no longer applied here because health changes
+        are now handled every turn by apply_hunger_health_effect().
+        """
         self.hunger = min(MAX_HUNGER, self.hunger + 15)
 
-        if self.hunger >= 80:
-            self.health = max(0, self.health - 10)
+    def apply_hunger_health_effect(self) -> int:
+        """
+        Apply the per-turn health effect based on hunger.
+
+        Rules:
+        - Hunger < 20: restore 2 HP
+        - Hunger 20 to 60: no health change
+        - Hunger 61 to 79: lose 1 HP
+        - Hunger 80 to 99: lose 2 HP
+        - Hunger 100: lose 3 HP
+
+        Returns:
+            Positive value when health is restored.
+            Negative value when health is lost.
+            0 when health is unchanged.
+        """
+        old_health = self.health
+
+        if self.hunger < 20:
+            self.health = min(MAX_HEALTH, self.health + 2)
+
+        elif self.hunger <= 60:
+            pass
+
+        elif self.hunger < 80:
+            self.health = max(0, self.health - 1)
+
+        elif self.hunger < 100:
+            self.health = max(0, self.health - 2)
+
+        else:
+            self.health = max(0, self.health - 3)
+
+        return self.health - old_health
 
     def is_dead(self) -> bool:
         """Return True when the player's health reaches zero."""

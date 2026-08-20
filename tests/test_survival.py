@@ -175,43 +175,6 @@ def test_daily_hunger() -> None:
     assert stats.hunger == 35
     assert stats.health == 100
 
-
-def test_daily_hunger_starvation_damage() -> None:
-    """High hunger causes ten direct health damage."""
-    stats = SurvivalStats()
-    stats.hunger = 70
-    stats.armor = 50
-
-    stats.apply_daily_hunger()
-
-    assert stats.hunger == 85
-    assert stats.health == 90
-    assert stats.armor == 50
-
-
-def test_daily_hunger_clamps_at_100() -> None:
-    """Daily hunger is clamped at 100."""
-    stats = SurvivalStats()
-    stats.hunger = 95
-
-    stats.apply_daily_hunger()
-
-    assert stats.hunger == 100
-    assert stats.health == 90
-
-
-def test_daily_hunger_damage_can_kill() -> None:
-    """Starvation damage can reduce health to zero."""
-    stats = SurvivalStats()
-    stats.health = 5
-    stats.hunger = 80
-
-    stats.apply_daily_hunger()
-
-    assert stats.health == 0
-    assert stats.is_dead() is True
-
-
 def test_is_dead_false_when_alive() -> None:
     """A player with positive health is alive."""
     stats = SurvivalStats()
@@ -225,3 +188,41 @@ def test_is_dead_true_at_zero() -> None:
     stats.health = 0
 
     assert stats.is_dead() is True
+
+def test_daily_hunger_increases_hunger_without_health_damage() -> None:
+    """Daily hunger increases hunger without directly changing health."""
+    stats = SurvivalStats()
+    stats.hunger = 70
+    stats.health = 100
+    stats.armor = 50
+
+    stats.apply_daily_hunger()
+
+    assert stats.hunger == 85
+    assert stats.health == 100
+    assert stats.armor == 50
+
+
+def test_daily_hunger_clamps_at_100() -> None:
+    """Daily hunger is clamped at 100 without directly damaging health."""
+    stats = SurvivalStats()
+    stats.hunger = 95
+    stats.health = 100
+
+    stats.apply_daily_hunger()
+
+    assert stats.hunger == 100
+    assert stats.health == 100
+
+
+def test_daily_hunger_does_not_kill_player_directly() -> None:
+    """Daily hunger increase itself does not directly damage the player."""
+    stats = SurvivalStats()
+    stats.health = 5
+    stats.hunger = 80
+
+    stats.apply_daily_hunger()
+
+    assert stats.hunger == 95
+    assert stats.health == 5
+    assert stats.is_dead() is False

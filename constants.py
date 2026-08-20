@@ -18,8 +18,8 @@ FPS = 60
 # ---------------------------------------------------------------------------
 
 HEX_SIZE = 38
-MAP_COLS = 11
-MAP_ROWS = 8
+MAP_COLS = 22
+MAP_ROWS = 16
 
 CAMP_POSITION = (5, 4)
 START_POSITION = CAMP_POSITION
