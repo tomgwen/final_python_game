@@ -89,7 +89,7 @@ def test_axe_does_not_lose_durability_when_gathering_food():
     assert game.get_tool_durability("axe") == TOOL_MAX_DURABILITY
 
 
-def test_tool_breaks_after_thirty_successful_uses():
+def test_tool_breaks_after_max_successful_uses():
     game = Game()
     game.set_tool_owned("axe", True)
 

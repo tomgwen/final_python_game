@@ -13,7 +13,27 @@ GOLD = (229, 157, 67)
 
 # 💡 全域變數：用來暫存阿強的頭像，避免每幀重複讀取圖片
 PLAYER_PORTRAIT = None
+def inventory_modal_rect(surface) -> pygame.Rect:
+    screen_w, screen_h = surface.get_size()
+    modal_w, modal_h = 500, 420
 
+    return pygame.Rect(
+        (screen_w - modal_w) // 2,
+        (screen_h - modal_h) // 2,
+        modal_w,
+        modal_h,
+    )
+
+
+def inventory_close_rect(surface) -> pygame.Rect:
+    modal = inventory_modal_rect(surface)
+
+    return pygame.Rect(
+        modal.right - 48,
+        modal.y + 14,
+        32,
+        32,
+    )
 def draw_inventory_modal(surface, fonts, game):
     global PLAYER_PORTRAIT
     try:
@@ -23,9 +43,9 @@ def draw_inventory_modal(surface, fonts, game):
         surface.blit(shade, (0, 0))
 
         # 2. 決定背包面板大小與置中位置
-        screen_w, screen_h = surface.get_size()
-        modal_w, modal_h = 500, 420
-        modal_rect = pygame.Rect((screen_w - modal_w) // 2, (screen_h - modal_h) // 2, modal_w, modal_h)
+        modal_rect = inventory_modal_rect(surface)
+        modal_w = modal_rect.width
+        modal_h = modal_rect.height
 
         # 畫底框
         pygame.draw.rect(surface, PANEL, modal_rect, border_radius=12)
@@ -34,9 +54,40 @@ def draw_inventory_modal(surface, fonts, game):
         # 標題與關閉提示
         title_surf = fonts["heading"].render("背包與裝備", True, GOLD)
         surface.blit(title_surf, (modal_rect.x + 20, modal_rect.y + 20))
-        esc_surf = fonts["tiny"].render("按 ESC 或 I 關閉", True, MUTED)
-        surface.blit(esc_surf, (modal_rect.right - 120, modal_rect.y + 25))
+        close = inventory_close_rect(surface)
+        mouse_pos = pygame.mouse.get_pos()
 
+        close_fill = (
+            (112, 58, 52)
+            if close.collidepoint(mouse_pos)
+            else PANEL_2
+        )
+
+        pygame.draw.rect(
+            surface,
+            close_fill,
+            close,
+            border_radius=7,
+        )
+
+        pygame.draw.rect(
+            surface,
+            (210, 80, 70),
+            close,
+            1,
+            border_radius=7,
+        )
+
+        x_surf = fonts["body"].render(
+            "X",
+            True,
+            TEXT,
+        )
+
+        surface.blit(
+            x_surf,
+            x_surf.get_rect(center=close.center),
+        )
         # 3. 裝備槽位資料準備
         arrow_amt = 0
         try:

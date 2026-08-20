@@ -395,6 +395,9 @@ class Game:
         self.floating_icon_tile = None
         self.floating_icon_amount = 0
         self.floating_icon_start_time = 0
+        self.broken_tool_type = None
+        self.broken_tool_tile = None
+        self.broken_tool_start_time = 0
 
         self.logs = [
             "你在石器時代的荒野中醒來。",
@@ -518,6 +521,11 @@ class Game:
         if self.tool_durability[tool_name] <= 0:
             self.tool_durability[tool_name] = 0
             setattr(self, attr_name, False)
+
+            self.broken_tool_type = tool_name
+            self.broken_tool_tile = self.player
+            self.broken_tool_start_time = pygame.time.get_ticks()
+
             self.log(f"{TOOL_NAMES[tool_name]}損毀了！")
 
         return True
@@ -1987,11 +1995,16 @@ def hud_buttons(game: Game):
     hud = get_right_hud_rect(surface) if surface is not None else HUD_PANEL
     if game.phase == "day":
         entries = [
-            ("eat", "吃食物", game.inventory.get("food") > 0),
-            ("spear", "製作石矛", not game.has_spear and game.inventory.has({"wood": 2, "stone": 1})),
-            ("axe", "製作石斧", not game.has_axe and game.inventory.has({"wood": 1, "stone": 2})),
-            ("pickaxe", "製作石鎬", not game.has_pickaxe and game.inventory.has({"wood": 2, "stone": 2})),
-            ("armor", "製作護甲", game.inventory.has({"hide": 2, "stone": 1})),
+            (
+                "eat",
+                "吃食物",
+                game.inventory.get("food") > 0,
+            ),
+            (
+                "craft_menu",
+                "製作",
+                True,
+            ),
         ]
         y = hud.y + 438
         columns = 2
@@ -2045,14 +2058,264 @@ def execute_hud_action(game: Game, action: str) -> None:
     elif action == "restart":
         game.reset()
 
+def craft_menu_entries(game: Game):
+    return [
+        (
+            "spear",
+            "石矛",
+            "木材 x2・石頭 x1",
+            not game.has_spear
+            and game.inventory.has({"wood": 2, "stone": 1}),
+        ),
+        (
+            "axe",
+            "石斧",
+            "木材 x1・石頭 x2",
+            not game.has_axe
+            and game.inventory.has({"wood": 1, "stone": 2}),
+        ),
+        (
+            "pickaxe",
+            "石鎬",
+            "木材 x2・石頭 x2",
+            not game.has_pickaxe
+            and game.inventory.has({"wood": 2, "stone": 2}),
+        ),
+        (
+            "bow",
+            "弓",
+            "木材 x2・獸皮 x1",
+            not game.has_bow
+            and game.inventory.has({"wood": 2, "hide": 1}),
+        ),
+        (
+            "arrows",
+            "箭矢 x5",
+            "木材 x1・石頭 x1",
+            game.inventory.has({"wood": 1, "stone": 1}),
+        ),
+        (
+            "armor",
+            "獸皮護甲",
+            "獸皮 x2・石頭 x1",
+            game.inventory.has({"hide": 2, "stone": 1}),
+        ),
+    ]
 
+
+def craft_menu_rect() -> pygame.Rect:
+    surface = pygame.display.get_surface()
+
+    width, height = (
+        surface.get_size()
+        if surface is not None
+        else (SCREEN_WIDTH, SCREEN_HEIGHT)
+    )
+
+    menu_width = min(460, width - 80)
+    menu_height = 430
+
+    return pygame.Rect(
+        (width - menu_width) // 2,
+        (height - menu_height) // 2,
+        menu_width,
+        menu_height,
+    )
+def craft_close_rect() -> pygame.Rect:
+    modal = craft_menu_rect()
+
+    return pygame.Rect(
+        modal.right - 48,
+        modal.y + 14,
+        32,
+        32,
+    )
+
+def craft_menu_rows(game: Game):
+    modal = craft_menu_rect()
+
+    rows = []
+
+    for index, entry in enumerate(craft_menu_entries(game)):
+        action, label, cost, enabled = entry
+
+        rect = pygame.Rect(
+            modal.x + 24,
+            modal.y + 74 + index * 54,
+            modal.width - 48,
+            46,
+        )
+
+        rows.append(
+            (
+                action,
+                label,
+                cost,
+                enabled,
+                rect,
+            )
+        )
+
+    return rows
+
+
+def draw_craft_menu(
+    surface,
+    fonts,
+    game: Game,
+) -> None:
+    shade = pygame.Surface(
+        surface.get_size(),
+        pygame.SRCALPHA,
+    )
+    shade.fill((0, 0, 0, 150))
+    surface.blit(shade, (0, 0))
+
+    modal = craft_menu_rect()
+
+    pygame.draw.rect(
+        surface,
+        (25, 28, 31),
+        modal,
+        border_radius=16,
+    )
+
+    pygame.draw.rect(
+        surface,
+        GOLD,
+        modal,
+        2,
+        border_radius=16,
+    )
+
+    text(
+        surface,
+        fonts["heading"],
+        "製作裝備",
+        modal.x + 24,
+        modal.y + 20,
+        GOLD_LIGHT,
+    )
+    close = craft_close_rect()
+    mouse = pygame.mouse.get_pos()
+
+    close_fill = (
+        (112, 58, 52)
+        if close.collidepoint(mouse)
+        else PANEL_2
+    )
+
+    pygame.draw.rect(
+        surface,
+        close_fill,
+        close,
+        border_radius=7,
+    )
+
+    pygame.draw.rect(
+        surface,
+        RED,
+        close,
+        1,
+        border_radius=7,
+    )
+
+    centered_text(
+        surface,
+        fonts["body"],
+        "X",
+        close.center,
+        TEXT,
+    )
+
+    text(
+        surface,
+        fonts["tiny"],
+        "選擇要製作的裝備｜右上角 X 關閉",
+        modal.x + 24,
+        modal.y + 50,
+        MUTED,
+    )
+
+    mouse = pygame.mouse.get_pos()
+
+    for action, label, cost, enabled, rect in craft_menu_rows(game):
+        hovered = (
+            enabled
+            and rect.collidepoint(mouse)
+        )
+
+        fill = (
+            (67, 61, 45)
+            if hovered
+            else PANEL_2
+        )
+
+        pygame.draw.rect(
+            surface,
+            fill,
+            rect,
+            border_radius=9,
+        )
+
+        pygame.draw.rect(
+            surface,
+            GOLD if enabled else (72, 76, 81),
+            rect,
+            1,
+            border_radius=9,
+        )
+
+        color = TEXT if enabled else MUTED
+
+        text(
+            surface,
+            fonts["small"],
+            label,
+            rect.x + 14,
+            rect.y + 7,
+            color,
+        )
+
+        text(
+            surface,
+            fonts["tiny"],
+            cost,
+            rect.x + 145,
+            rect.y + 10,
+            GOLD_LIGHT if enabled else MUTED,
+        )
 # =========================================================
 # 合成清單
 # =========================================================
 def recipe_button_rect() -> pygame.Rect:
     surface = pygame.display.get_surface()
     hud = get_right_hud_rect(surface) if surface is not None else HUD_PANEL
-    return pygame.Rect(hud.x + 14, hud.bottom - 48, hud.width - 28, 34)
+
+    gap = 8
+    button_width = (hud.width - 28 - gap) // 2
+
+    return pygame.Rect(
+        hud.x + 14,
+        hud.bottom - 48,
+        button_width,
+        34,
+    )
+
+
+def inventory_button_rect() -> pygame.Rect:
+    surface = pygame.display.get_surface()
+    hud = get_right_hud_rect(surface) if surface is not None else HUD_PANEL
+
+    gap = 8
+    button_width = (hud.width - 28 - gap) // 2
+
+    return pygame.Rect(
+        hud.x + 14 + button_width + gap,
+        hud.bottom - 48,
+        button_width,
+        34,
+    )
 
 def recipe_modal_rect() -> pygame.Rect:
     surface = pygame.display.get_surface()
@@ -2256,6 +2519,7 @@ def draw_game(
     drag_path=None,
     recipe_open=False,
     recipe_scroll=0,
+    craft_open=False,
     inventory_open=False,
     visual_mgr=None,
     anim_timer=0,
@@ -2537,7 +2801,72 @@ def draw_game(
             val_text = fonts["heading"].render(fallback_txt, True, GOLD_LIGHT)
             val_text.fill((255, 255, 255, alpha), special_flags=pygame.BLEND_RGBA_MULT)
             screen.blit(val_text, val_text.get_rect(center=(icon_cx, icon_cy)))
+    if game.broken_tool_type is not None:
+        elapsed = (
+            pygame.time.get_ticks()
+            - game.broken_tool_start_time
+        )
 
+        duration = 1500
+
+        if elapsed <= duration:
+            progress = elapsed / duration
+
+            float_y = int(progress * 55)
+            alpha = max(
+                0,
+                255 - int(progress * 255),
+            )
+
+            icon_cx, icon_cy = axial_to_pixel(
+                game.broken_tool_tile,
+                camera,
+            )
+
+            # 放在採集提示更上方，避免重疊
+            icon_cy -= 70 + float_y
+
+            tool_name = game.broken_tool_type
+
+            icon_surface = icon_manager.get_icon(
+                "tools",
+                tool_name,
+                (40, 40),
+            ).copy()
+
+            icon_surface.set_alpha(alpha)
+
+            icon_rect = icon_surface.get_rect(
+                center=(
+                    icon_cx - 70,
+                    icon_cy,
+                )
+            )
+
+            screen.blit(
+                icon_surface,
+                icon_rect,
+            )
+
+            broken_text = fonts["heading"].render(
+                f"{TOOL_NAMES[tool_name]}損毀！",
+                True,
+                RED,
+            )
+
+            broken_text.set_alpha(alpha)
+
+            broken_rect = broken_text.get_rect(
+                midleft=(
+                    icon_cx - 42,
+                    icon_cy,
+                )
+            )
+
+            screen.blit(
+                broken_text,
+                broken_rect,
+            )
     # ... (下半部 draw_game 的生存紀錄與 HUD 程式碼保持不變) ...
     screen.set_clip(previous_clip)
     # =====================================================
@@ -2664,17 +2993,6 @@ def draw_game(
                 veil.get_rect(center=center),
             )
 
-    fire_rect = pygame.Rect(
-        hud_x,
-        hud.y + 320,
-        hud_width,
-        38,
-    )
-    pygame.draw.rect(screen, PANEL_2, fire_rect, border_radius=9)
-    fire_text = "燃燒中" if game.campfire.lit else "已熄滅"
-    draw_ui_icon(screen, "campfire", (fire_rect.x + 19, fire_rect.centery), GOLD)
-    text(screen, fonts["tiny"], f"{fire_text}｜{game.campfire.fuel}/{CAMPFIRE_MAX_FUEL}", fire_rect.x + 38, fire_rect.y + 11, GOLD_LIGHT if game.campfire.lit else RED)
-
     draw_selected_tile_info(screen, fonts, game)
 
     # 操作提示
@@ -2694,21 +3012,49 @@ def draw_game(
     for action, label, rect, enabled in hud_buttons(game):
         draw_button(screen, fonts, rect, label, enabled, accent=(action in ("wait", "restart")))
         
-    draw_button(screen, fonts, recipe_button_rect(), "關閉合成清單" if recipe_open else "合成清單", True, accent=recipe_open)
+    draw_button(
+        screen,
+        fonts,
+        recipe_button_rect(),
+        "關閉合成清單" if recipe_open else "合成清單",
+        True,
+        accent=recipe_open,
+    )
+    draw_button(
+        screen,
+        fonts,
+        inventory_button_rect(),
+        "關閉背包" if inventory_open else "背包",
+        True,
+        accent=inventory_open,
+    )
+
     if recipe_open:
         draw_recipe_modal(
             screen,
             fonts,
             recipe_scroll,
         )
-    if context_tile is not None and not recipe_open:
-        draw_context_menu(screen, fonts, game, context_tile, context_origin)
-        
+
+    if craft_open:
+        draw_craft_menu(
+            screen,
+            fonts,
+            game,
+        )
     if inventory_open:
         inventory_ui.draw_inventory_modal(
             screen,
             fonts,
             game,
+        )
+    if context_tile is not None and not recipe_open and not craft_open and not inventory_open:
+        draw_context_menu(
+            screen,
+            fonts,
+            game,
+            context_tile,
+            context_origin,
         )
 
     if notification_manager is not None:
@@ -2913,6 +3259,7 @@ def main() -> None:
     drag_path = None
     recipe_open = False
     recipe_scroll = 0
+    craft_open = False
     inventory_open = False
     anim_timer = 0
     
@@ -2949,6 +3296,8 @@ def main() -> None:
                     if view == "game":
                         if recipe_open:
                             recipe_open = False
+                        elif craft_open:
+                            craft_open = False
                         elif inventory_open:
                             inventory_open = False
                         elif context_tile is not None:
@@ -2957,12 +3306,7 @@ def main() -> None:
                             running = False
                     else:
                         running = False
-                elif event.key == pygame.K_i and view == "game":
-                    inventory_open = not inventory_open
-                    recipe_open = False
-                    context_tile = None
-                    dragging_player = False
-                    continue
+
                 elif event.key == pygame.K_h and view == "game":
                     view = "tutorial"
                     tutorial_page = 0
@@ -3037,17 +3381,7 @@ def main() -> None:
                     drag_path = None
                     context_tile = None
                     continue
-                if event.type == pygame.MOUSEWHEEL:
-                    if recipe_open:
-                        recipe_scroll -= event.y * 40
-                        recipe_scroll = max(
-                            0,
-                            min(
-                                recipe_scroll,
-                                recipe_max_scroll(),
-                            ),
-                        )
-                    continue
+
                 if event.type == pygame.MOUSEWHEEL:
                     if recipe_open:
                         recipe_scroll -= event.y * 40
@@ -3063,30 +3397,109 @@ def main() -> None:
                     continue
 
                 mouse = event.pos
-
                 # =================================================
-                # 合成清單
+                # 已開啟的 Modal
+                # 一次只允許操作一個選單
                 # =================================================
-                if event.button == 1 and recipe_button_rect().collidepoint(mouse):
-                    audio.play_sfx("click")
-                    recipe_open = not recipe_open
 
-                    if recipe_open:
+                if recipe_open:
+                    if (
+                        event.button == 1
+                        and recipe_close_rect().collidepoint(mouse)
+                    ):
+                        audio.play_sfx("click")
+                        recipe_open = False
                         recipe_scroll = 0
+
+                    continue
+
+
+                if craft_open:
+                    # 先處理右上角 X
+                    if (
+                        event.button == 1
+                        and craft_close_rect().collidepoint(mouse)
+                    ):
+                        audio.play_sfx("click")
+                        craft_open = False
+                        continue
+
+                    # 再處理製作項目
+                    if event.button == 1:
+                        for (
+                            action,
+                            label,
+                            cost,
+                            enabled,
+                            rect,
+                        ) in craft_menu_rows(game):
+
+                            if rect.collidepoint(mouse):
+                                audio.play_sfx("click")
+
+                                if enabled:
+                                    execute_hud_action(
+                                        game,
+                                        action,
+                                    )
+                                    craft_open = False
+
+                                break
+
+                    continue
+
+
+                if inventory_open:
+                    if (
+                        event.button == 1
+                        and inventory_ui.inventory_close_rect(
+                            screen
+                        ).collidepoint(mouse)
+                    ):
+                        audio.play_sfx("click")
+                        inventory_open = False
+
+                    continue
+
+
+                # =================================================
+                # 沒有 Modal 開啟時，才能按這些 UI 按鈕
+                # =================================================
+
+                if (
+                    event.button == 1
+                    and recipe_button_rect().collidepoint(mouse)
+                ):
+                    audio.play_sfx("click")
+
+                    recipe_open = True
+                    recipe_scroll = 0
+
+                    craft_open = False
+                    inventory_open = False
 
                     context_tile = None
                     dragging_player = False
                     drag_path = None
                     continue
 
-                if recipe_open or inventory_open:
-                    if event.button == 1 and recipe_close_rect().collidepoint(mouse):
-                        audio.play_sfx("click")
-                        recipe_open = False
-                        recipe_scroll = 0
-                        inventory_open = False
-                    continue
 
+                if (
+                    event.button == 1
+                    and inventory_button_rect().collidepoint(mouse)
+                ):
+                    audio.play_sfx("click")
+
+                    inventory_open = True
+
+                    recipe_open = False
+                    recipe_scroll = 0
+                    craft_open = False
+
+                    context_tile = None
+                    dragging_player = False
+                    drag_path = None
+                    continue
                 # =================================================
                 # 右鍵選單
                 # =================================================
@@ -3126,12 +3539,21 @@ def main() -> None:
 
                 # 左鍵點擊 HUD 按鈕
                 clicked_hud = False
+
                 for action, label, rect, enabled in hud_buttons(game):
                     if rect.collidepoint(mouse):
                         clicked_hud = True
                         audio.play_sfx("click")
+
                         if enabled:
-                            execute_hud_action(game, action)
+                            if action == "craft_menu":
+                                craft_open = True
+                                recipe_open = False
+                                recipe_scroll = 0
+                                inventory_open = False
+                            else:
+                                execute_hud_action(game, action)
+
                         context_tile = None
                         break
                 if clicked_hud:
@@ -3274,7 +3696,17 @@ def main() -> None:
         if view == "game" and game.floating_icon_type is not None:
             if pygame.time.get_ticks() - game.floating_icon_start_time > 1000:
                 game.floating_icon_type = None
-
+        if (
+            view == "game"
+            and game.broken_tool_type is not None
+        ):
+            if (
+                pygame.time.get_ticks()
+                - game.broken_tool_start_time
+                > 1500
+            ):
+                game.broken_tool_type = None
+                game.broken_tool_tile = None
         if view == "game":
             now_ms = pygame.time.get_ticks()
             notification_manager.sync_from_logs(game.logs, now_ms)
@@ -3297,6 +3729,7 @@ def main() -> None:
                 drag_path,
                 recipe_open,
                 recipe_scroll,
+                craft_open,
                 inventory_open,
                 visual_mgr,
                 anim_timer,
