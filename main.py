@@ -1996,7 +1996,6 @@ def draw_enemy_icon(
         enemy_type,
         (44, 44),
     )
-    print("DRAW ENEMY:", enemy_type)
     icon_surface = icon_manager.get_icon(
         "creatures",
         enemy_type,
@@ -2397,7 +2396,38 @@ def draw_game(
             pygame.draw.polygon(screen, (221, 221, 205), points, 2)
         if tile == game.selected_tile:
             pygame.draw.polygon(screen, GOLD_LIGHT, points, 3)
+    # =====================================================
+# 寶箱
+# =====================================================
+    for chest in game.treasure_chests.values():
+        if chest.position not in game.discovered:
+            continue
 
+        chest_x, chest_y = axial_to_pixel(
+            chest.position,
+            camera,
+        )
+
+        icon_name = (
+            "chest_open"
+            if chest.opened
+            else "chest"
+        )
+
+        chest_icon = icon_manager.get_icon(
+            "objects",
+            icon_name,
+            (42, 42),
+        )
+
+        chest_rect = chest_icon.get_rect(
+            center=(chest_x, chest_y - 7),
+        )
+
+        screen.blit(
+            chest_icon,
+            chest_rect,
+        )
     # =====================================================
     # 拖曳路徑
     # =====================================================
