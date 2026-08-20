@@ -2501,36 +2501,122 @@ def draw_game(
     draw_bar(screen, fonts, hud_x + 27, hud.y + 143, hud_width - 27, "飢餓", game.survival.hunger, 100, GOLD)
 
     resource_values = [
-        ("food", "食", game.inventory.get("food"), (178, 87, 63)),
-        ("wood", "木", game.inventory.get("wood"), (133, 88, 52)),
-        ("stone", "石", game.inventory.get("stone"), (147, 147, 143)),
-        ("hide", "皮", game.inventory.get("hide"), (162, 118, 72)),
+        ("food", "食物", game.inventory.get("food")),
+        ("wood", "木材", game.inventory.get("wood")),
+        ("stone", "石頭", game.inventory.get("stone")),
+        ("hide", "獸皮", game.inventory.get("hide")),
+        ("arrow", "箭矢", game.inventory.get("arrow")),
     ]
-    card_gap = 8
-    card_width = (hud_width - card_gap) // 2
-    for index, (icon_name, label, value, color) in enumerate(resource_values):
-        row = index // 2
-        col = index % 2
-        rect = pygame.Rect(hud_x + col * (card_width + card_gap), hud.y + 198 + row * 48, card_width, 40)
-        pygame.draw.rect(screen, PANEL_2, rect, border_radius=9)
-        draw_ui_icon(screen, icon_name, (rect.x + 18, rect.centery), color)
-        text(screen, fonts["tiny"], label, rect.x + 34, rect.y + 5, MUTED)
-        text(screen, fonts["small"], value, rect.x + 34, rect.y + 19, TEXT)
+
+    card_gap = 6
+    columns = 3
+    card_width = (
+        hud_width - card_gap * (columns - 1)
+    ) // columns
+
+    for index, (icon_name, label, value) in enumerate(resource_values):
+        row = index // columns
+        col = index % columns
+
+        rect = pygame.Rect(
+            hud_x + col * (card_width + card_gap),
+            hud.y + 198 + row * 48,
+            card_width,
+            40,
+        )
+
+        pygame.draw.rect(
+            screen,
+            PANEL_2,
+            rect,
+            border_radius=9,
+        )
+
+        icon_surface = icon_manager.get_icon(
+            "resources",
+            icon_name,
+            (24, 24),
+        )
+
+        icon_rect = icon_surface.get_rect(
+            center=(
+                rect.x + 18,
+                rect.centery,
+            )
+        )
+
+        screen.blit(
+            icon_surface,
+            icon_rect,
+        )
+
+        text(
+            screen,
+            fonts["tiny"],
+            label,
+            rect.x + 34,
+            rect.y + 5,
+            MUTED,
+        )
+
+        text(
+            screen,
+            fonts["small"],
+            value,
+            rect.x + 34,
+            rect.y + 19,
+            TEXT,
+        )
 
     equipment = (
         ("spear", game.has_spear),
         ("axe", game.has_axe),
         ("pickaxe", game.has_pickaxe),
+        ("bow", game.has_bow),
     )
-    for index, (icon_name, owned) in enumerate(equipment):
-        center = (hud_x + 18 + index * 36, hud.y + 303)
-        draw_ui_icon(screen, icon_name, center, GOLD if owned else (72, 75, 78))
-        if not owned:
-            veil = pygame.Surface((24, 24), pygame.SRCALPHA)
-            veil.fill((20, 22, 24, 145))
-            screen.blit(veil, veil.get_rect(center=center))
 
-    fire_rect = pygame.Rect(hud_x, hud.y + 320, hud_width, 38)
+    for index, (icon_name, owned) in enumerate(equipment):
+        center = (
+            hud_x + 18 + index * 36,
+            hud.y + 303
+        )
+
+        icon_surface = icon_manager.get_icon(
+            "tools",
+            icon_name,
+            (24, 24),
+        )
+
+        icon_rect = icon_surface.get_rect(
+            center=center,
+        )
+
+        screen.blit(
+            icon_surface,
+            icon_rect,
+        )
+
+        if not owned:
+            veil = pygame.Surface(
+                (24, 24),
+                pygame.SRCALPHA,
+            )
+
+            veil.fill(
+                (20, 22, 24, 145)
+            )
+
+            screen.blit(
+                veil,
+                veil.get_rect(center=center),
+            )
+
+    fire_rect = pygame.Rect(
+        hud_x,
+        hud.y + 320,
+        hud_width,
+        38,
+    )
     pygame.draw.rect(screen, PANEL_2, fire_rect, border_radius=9)
     fire_text = "燃燒中" if game.campfire.lit else "已熄滅"
     draw_ui_icon(screen, "campfire", (fire_rect.x + 19, fire_rect.centery), GOLD)
