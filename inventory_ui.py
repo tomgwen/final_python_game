@@ -1,0 +1,154 @@
+import pygame
+import icon_manager
+import traceback
+import os  # ?í° ?∞Â??ØÂÖ• os ‰æÜË??ÜÊ?Ê°àË∑ØÂæ?
+
+# Ê≤øÁî®?äÊà≤?ÑËâ≤ÂΩ©È¢®??
+PANEL = (29, 32, 36)
+PANEL_2 = (38, 42, 47)
+BORDER = (66, 71, 76)
+TEXT = (239, 235, 221)
+MUTED = (168, 169, 165)
+GOLD = (229, 157, 67)
+
+# ?í° ?®Â?ËÆäÊï∏ÔºöÁî®‰æÜÊö´Â≠òÈòøÂº∑Á??≠Â?ÔºåÈÅø?çÊ?ÂπÄ?çË?ËÆÄ?ñÂ???
+PLAYER_PORTRAIT = None
+
+def draw_inventory_modal(surface, fonts, game):
+    global PLAYER_PORTRAIT
+    try:
+        # 1. ?´ÂÖ®?¢Â??ÑÂ??èÊ?ÈªëËâ≤?ÆÁΩ©
+        shade = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+        shade.fill((0, 0, 0, 180))
+        surface.blit(shade, (0, 0))
+
+        # 2. Ê±∫Â??åÂ??¢ÊùøÂ§ßÂ??áÁΩÆ‰∏≠‰?ÁΩ?
+        screen_w, screen_h = surface.get_size()
+        modal_w, modal_h = 500, 420
+        modal_rect = pygame.Rect((screen_w - modal_w) // 2, (screen_h - modal_h) // 2, modal_w, modal_h)
+
+        # ?´Â?Ê°?
+        pygame.draw.rect(surface, PANEL, modal_rect, border_radius=12)
+        pygame.draw.rect(surface, BORDER, modal_rect, 2, border_radius=12)
+
+        # Ê®ôÈ??áÈ??âÊ?Á§?
+        title_surf = fonts["heading"].render("?åÂ??áË???, True, GOLD)
+        surface.blit(title_surf, (modal_rect.x + 20, modal_rect.y + 20))
+        esc_surf = fonts["tiny"].render("??ESC ??I ?úÈ?", True, MUTED)
+        surface.blit(esc_surf, (modal_rect.right - 120, modal_rect.y + 25))
+
+        # 3. Ë£ùÂ?ÊßΩ‰?Ë≥áÊ?Ê∫ñÂ?
+        arrow_amt = 0
+        try:
+            arrow_amt = game.inventory.get("arrow")
+            if arrow_amt is None:
+                arrow_amt = 0
+        except Exception:
+            arrow_amt = 0
+
+        slots = [
+            {"id": "axe", "name": "?≥Êñß", "type": "tools", "pos": (modal_rect.centerx - 120, modal_rect.centery - 40), "owned": getattr(game, "has_axe", False)},
+            {"id": "pickaxe", "name": "?≥Èé¨", "type": "tools", "pos": (modal_rect.centerx - 120, modal_rect.centery + 60), "owned": getattr(game, "has_pickaxe", False)},
+            {"id": "spear", "name": "?≥Á?", "type": "tools", "pos": (modal_rect.centerx + 120, modal_rect.centery - 40), "owned": getattr(game, "has_spear", False)},
+            {"id": "bow", "name": "?®Â?", "type": "tools", "pos": (modal_rect.centerx + 120, modal_rect.centery + 60), "owned": getattr(game, "has_bow", False)},
+            {"id": "arrow", "name": "ÁÆ≠Áü¢", "type": "resources", "pos": (modal_rect.centerx, modal_rect.centery + 90), "owned": arrow_amt > 0, "amount": arrow_amt}
+        ]
+
+        # ==========================================
+        # ?í° ?∞Â?ÔºöË??•‰∏¶Ë£ÅÂ??øÂº∑?ÑÂ?Á¥†Â§ß?≠Ë≤º
+        # ==========================================
+        if PLAYER_PORTRAIT is None:
+            try:
+                img_path = os.path.join("assets", "images", "characters", "player.png")
+                if os.path.exists(img_path):
+                    sheet = pygame.image.load(img_path).convert_alpha()
+                    # ?øÂº∑?ÑÊ≠£?¢Á¨¨‰∏Ä?ºÂ?Â•ΩÂú®Â∑¶‰?ËßíÁ? (0, 0)ÔºåÂØ¨È´òÁÇ∫ 48x48
+                    raw_portrait = sheet.subsurface(pygame.Rect(0, 0, 48, 48))
+
+                    # ?í° ‰øÆÊîπ 1ÔºöÊ? 140 Á∏ÆÂ???110ÔºåÈÄôÊ®£Â∞±‰??ÉË??∫Áõ¥Âæ?90 ?ÑÂ???
+                    PLAYER_PORTRAIT = pygame.transform.scale(raw_portrait, (110, 110))
+                else:
+                    PLAYER_PORTRAIT = "fallback"
+            except Exception:
+                PLAYER_PORTRAIT = "fallback"
+
+        # ?´‰∏≠?ìÁ?ËßíËâ≤Á§∫Ê??ñÂ?Ê°?
+        center_pos = (modal_rect.centerx, modal_rect.centery - 10)
+        pygame.draw.circle(surface, PANEL_2, center_pos, 45)
+        pygame.draw.circle(surface, BORDER, center_pos, 45, 2)
+
+        # Â¶ÇÊ??ñÁ§∫?êÂ?ËºâÂÖ•Â∞±Ë≤º‰∏äÂ??áÔ?Â§±Ê?Â∞±Ë≤º?åÈòøÂº∑„ÄçÊ?Â≠?
+        if PLAYER_PORTRAIT and PLAYER_PORTRAIT != "fallback":
+            # ?í° ‰øÆÊîπ 2ÔºöÂ??∫Â??áÊú¨Ë∫´‰??πÊ??ôÁôΩÔºåÊ?‰ª•Ê? Y Ëª∏ÂæÆË™øÂ?‰∏äÊ? 8 ?ãÂ?Á¥?(-8)ÔºåË?‰ªñË?Ë¶∫‰?ÂÆåÁ?ÁΩÆ‰∏≠
+            portrait_rect = PLAYER_PORTRAIT.get_rect(center=(center_pos[0]-2, center_pos[1] - 17))
+            surface.blit(PLAYER_PORTRAIT, portrait_rect)
+        else:
+            player_text = fonts["heading"].render("?øÂº∑", True, TEXT)
+            surface.blit(player_text, player_text.get_rect(center=center_pos))
+
+        # 4. ?´Âá∫ÊØè‰??ãË??ôÊßΩ
+        mouse_pos = pygame.mouse.get_pos()
+        hovered_slot = None
+
+        for slot in slots:
+            slot_rect = pygame.Rect(0, 0, 54, 54)
+            slot_rect.center = slot["pos"]
+
+            # ÊßΩ‰??åÊôØ
+            pygame.draw.rect(surface, PANEL_2, slot_rect, border_radius=8)
+            pygame.draw.rect(surface, BORDER, slot_rect, 1, border_radius=8)
+
+            # ÊªëÈ??∏Â??àÊ?
+            if slot_rect.collidepoint(mouse_pos):
+                hovered_slot = slot
+                pygame.draw.rect(surface, GOLD, slot_rect, 2, border_radius=8)
+
+            # ??Icon
+            icon = icon_manager.get_icon(slot["type"], slot["id"], (36, 36))
+            surface.blit(icon, icon.get_rect(center=slot_rect.center))
+
+            # ?™Ê??âÊ??†‰?ËÆäÊ??ÑÈÅÆÁΩ?
+            if not slot["owned"]:
+                veil = pygame.Surface((54, 54), pygame.SRCALPHA)
+                # ?í° Ë™øÊï¥Â§ñË?ÔºöÂ??ÆÁΩ©?èÊ?Â∫¶Â? 180 Â§ßÂ??ç‰???90Ôºå‰??ôÊ??ñÊ??ú‰?Á¢∫‰??ãÂ??∞Â?Ê°?
+                veil.fill((15, 18, 20, 90))
+                surface.blit(veil, slot_rect.topleft)
+
+            # ÁÆ≠Áü¢?∏È?È°ØÁ§∫
+            if slot["id"] == "arrow" and slot.get("amount", 0) > 0:
+                amt_text = fonts["tiny"].render(str(slot["amount"]), True, TEXT)
+                surface.blit(amt_text, (slot_rect.right - 18, slot_rect.bottom - 18))
+
+        # 5. Â∫ïÈÉ®Ë≥áË??Ä (È°ØÁ§∫ Hover ?∞Á??©Â?Ë≥áË?)
+        info_rect = pygame.Rect(modal_rect.x + 20, modal_rect.bottom - 85, modal_w - 40, 65)
+        pygame.draw.rect(surface, PANEL_2, info_rect, border_radius=8)
+        pygame.draw.rect(surface, BORDER, info_rect, 1, border_radius=8)
+
+        if hovered_slot:
+            name_surf = fonts["body"].render(hovered_slot["name"], True, GOLD)
+            surface.blit(name_surf, (info_rect.x + 15, info_rect.y + 10))
+
+            status = "Â∑≤Ë??? if hovered_slot["owned"] else "?™Ê???
+            if hovered_slot["id"] == "arrow":
+                status = f"?ÅÊ??∏È?: {hovered_slot.get('amount', 0)}"
+
+            status_surf = fonts["small"].render(status, True, MUTED if not hovered_slot["owned"] else TEXT)
+            surface.blit(status_surf, (info_rect.x + 15, info_rect.y + 36))
+
+            # ?êÁ??ê‰?Â∫¶È°ØÁ§?
+            if hovered_slot["owned"] and hasattr(game, "tool_durability"):
+                try:
+                    dur = game.tool_durability.get(hovered_slot["id"])
+                    if dur is not None:
+                        dur_surf = fonts["small"].render(f"?ê‰?Â∫? {dur}", True, TEXT)
+                        surface.blit(dur_surf, (info_rect.right - 120, info_rect.y + 36))
+                except Exception:
+                    pass
+        else:
+            hint_surf = fonts["small"].render("Â∞áÊ∏∏Ê®ôÁßª?≥Â?Á§∫‰?‰ª•Êü•?ãË??ôË©≥Á¥∞Ë?Ë®?, True, MUTED)
+            surface.blit(hint_surf, hint_surf.get_rect(center=info_rect.center))
+
+    except Exception as e:
+        traceback.print_exc()
+        error_surf = fonts["heading"].render("UI?ºÁ??ØË™§ÔºÅË??•Á?‰∏ãÊñπÁµÇÁ´ØÊ©üÁ?Â≠?, True, (255, 50, 50))
+        surface.blit(error_surf, (surface.get_width() // 2 - 180, 100))
