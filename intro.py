@@ -111,7 +111,12 @@ def play_intro():
     pygame.init()
     pygame.mixer.init() 
     
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    is_fullscreen = False
+
+    screen = pygame.display.set_mode(
+        (SCREEN_WIDTH, SCREEN_HEIGHT),
+        pygame.RESIZABLE,
+    )
     pygame.display.set_caption("石器時代：荒野求生")
     clock = pygame.time.Clock()
     fonts = create_fonts()
@@ -141,7 +146,11 @@ def play_intro():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-                
+                if event.type == pygame.VIDEORESIZE and not is_fullscreen:
+                    screen = pygame.display.set_mode(
+                        event.size,
+                        pygame.RESIZABLE,
+                    )
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if phase == "story":
                     phase = "wakeup"
@@ -153,19 +162,34 @@ def play_intro():
                     running = False
             
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    running = False
-                elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
-                    if phase == "story":
-                        phase = "wakeup"
-                        state_start_time = current_time
-                    elif phase == "wakeup":
-                        phase = "done"
-                    elif phase == "done":
-                        start_game = True
-                        running = False
+                if event.key == pygame.K_F11:
+                    is_fullscreen = not is_fullscreen
 
-        screen.fill(BLACK)
+                    if is_fullscreen:
+                        screen = pygame.display.set_mode(
+                            (0, 0),
+                            pygame.FULLSCREEN,
+                        )
+                    else:
+                        screen = pygame.display.set_mode(
+                            (SCREEN_WIDTH, SCREEN_HEIGHT),
+                            pygame.RESIZABLE,
+                        )
+
+                elif event.key == pygame.K_ESCAPE:
+                    running = False
+
+                elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
+                                if phase == "story":
+                                    phase = "wakeup"
+                                    state_start_time = current_time
+                                elif phase == "wakeup":
+                                    phase = "done"
+                                elif phase == "done":
+                                    start_game = True
+                                    running = False
+
+                screen.fill(BLACK)
 
         if phase == "story":
             elapsed = current_time - state_start_time
