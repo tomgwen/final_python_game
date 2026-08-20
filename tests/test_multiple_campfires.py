@@ -165,7 +165,7 @@ def test_can_refuel_specific_second_campfire():
 
     assert game.add_firewood_day(second) is True
 
-    assert second.fuel == 5
+    assert second.fuel == 6
     assert game.campfire.fuel == primary_fuel_before
 
 

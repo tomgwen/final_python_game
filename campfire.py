@@ -5,8 +5,8 @@ from inventory import Inventory
 
 
 STARTING_FUEL = 3
-FUEL_PER_WOOD = 2
-RELIGHT_FUEL = 2
+FUEL_PER_WOOD = 3
+RELIGHT_FUEL = 3
 
 
 class Campfire:
@@ -36,7 +36,8 @@ class Campfire:
 
         if not self.lit:
             return False
-
+        if self.fuel >= CAMPFIRE_MAX_FUEL:
+            return False
         if not inventory.spend({RESOURCE_WOOD: amount}):
             return False
 

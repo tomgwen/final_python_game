@@ -13,15 +13,14 @@ def test_campfire_starts_lit_with_three_fuel():
     assert campfire.lit is True
 
 
-def test_add_one_wood_adds_two_fuel():
+def test_add_one_wood_adds_three_fuel():
     inventory = Inventory()
     campfire = Campfire((5, 4))
 
     wood_before = inventory.get("wood")
 
     assert campfire.add_fuel(inventory) is True
-
-    assert campfire.fuel == 5
+    assert campfire.fuel == 6
     assert inventory.get("wood") == wood_before - 1
 
 
@@ -30,7 +29,7 @@ def test_add_multiple_wood():
     campfire = Campfire((5, 4))
 
     assert campfire.add_fuel(inventory, 2) is True
-    assert campfire.fuel == 7
+    assert campfire.fuel == 9
 
 
 def test_fuel_is_capped_at_maximum():
@@ -43,17 +42,16 @@ def test_fuel_is_capped_at_maximum():
     assert campfire.fuel == CAMPFIRE_MAX_FUEL
 
 
-def test_extra_fuel_can_be_wasted_at_maximum():
+def test_add_fuel_at_maximum_does_not_waste_wood():
     inventory = Inventory()
     campfire = Campfire((5, 4))
 
     campfire.fuel = CAMPFIRE_MAX_FUEL
     wood_before = inventory.get("wood")
 
-    assert campfire.add_fuel(inventory, 1) is True
-
+    assert campfire.add_fuel(inventory, 1) is False
     assert campfire.fuel == CAMPFIRE_MAX_FUEL
-    assert inventory.get("wood") == wood_before - 1
+    assert inventory.get("wood") == wood_before
 
 
 def test_add_fuel_fails_without_enough_wood():
@@ -135,7 +133,7 @@ def test_negative_consume_raises_value_error():
         campfire.consume(-1)
 
 
-def test_relight_costs_one_wood_and_sets_two_fuel():
+def test_relight_costs_one_wood_and_sets_three_fuel():
     inventory = Inventory()
     campfire = Campfire((5, 4))
 
@@ -144,9 +142,8 @@ def test_relight_costs_one_wood_and_sets_two_fuel():
     wood_before = inventory.get("wood")
 
     assert campfire.relight(inventory) is True
-
     assert campfire.lit is True
-    assert campfire.fuel == 2
+    assert campfire.fuel == 3
     assert inventory.get("wood") == wood_before - 1
 
 
