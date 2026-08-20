@@ -14,7 +14,7 @@ from viewport_culling import visible_world_tiles
 import math
 import os
 import random
-
+from treasure import TreasureChest, generate_chest_contents
 import intro
 import game_over
 import day_transition
@@ -341,6 +341,8 @@ class Game:
 
         # 保留舊的 self.campfire，避免現有功能受到影響。
         self.campfire = primary_campfire
+        self.treasure_chests: dict[tuple[int, int], TreasureChest] = {}
+        self.generate_treasure_chests()
         self.discovered: set[tuple[int, int]] = set()
 
         self.player = CAMP_POSITION
@@ -416,7 +418,74 @@ class Game:
         else:
             self.tool_durability[tool_name] = 0
 
+    def generate_treasure_chests(
+        self,
+        count: int = 6,
+        seed: int | None = None,
+    ) -> None:
+        """Place treasure chests on valid random land tiles."""
+        rng = random.Random(seed)
 
+        valid_tiles = [
+            tile
+            for tile, terrain in self.terrain.items()
+            if terrain != "water"
+            and tile != CAMP_POSITION
+            and self.campfire_at(tile) is None
+            and self.unopened_treasure_chest_at(tile) is None
+            and self.buildings.get_building(tile) is None
+        ]
+
+        rng.shuffle(valid_tiles)
+
+        self.treasure_chests = {}
+
+        for tile in valid_tiles[:count]:
+            self.treasure_chests[tile] = TreasureChest(
+                position=tile,
+                contents=generate_chest_contents(rng),
+            )
+    def treasure_chest_at(
+        self,
+        tile: tuple[int, int],
+    ) -> TreasureChest | None:
+        return self.treasure_chests.get(tile)
+    def can_open_treasure_chest(
+        self,
+        chest: TreasureChest,
+    ) -> bool:
+        return (
+            self.phase in ("day", "night")
+            and not self.attack_animating
+            and not chest.opened
+            and hex_distance(self.player, chest.position) <= 1
+        )
+
+
+    def open_treasure_chest(
+        self,
+        chest: TreasureChest,
+    ) -> bool:
+        if chest.opened:
+            self.log("這個寶箱已經被打開了。")
+            return False
+
+        if not self.can_open_treasure_chest(chest):
+            self.log("你必須靠近寶箱才能打開。")
+            return False
+
+        for resource, amount in chest.contents.items():
+            self.inventory.add(resource, amount)
+
+        chest.opened = True
+
+        reward_text = "、".join(
+            f"{RESOURCE_NAMES.get(resource, resource)} +{amount}"
+            for resource, amount in chest.contents.items()
+        )
+
+        self.log(f"打開寶箱！獲得 {reward_text}。")
+        return True
     def use_tool(self, tool_name: str) -> bool:
         """Consume one durability point after a successful tool use."""
         attr_name = TOOL_OWNERSHIP_ATTRS.get(tool_name)
@@ -707,6 +776,7 @@ class Game:
             and hex_distance(self.player, tile) <= 2
             and self.buildings.get_building(tile) is None
             and self.campfire_at(tile) is None
+            and self.treasure_chest_at(tile) is None
         )
 
     def build_at(self, building_type: str, tile: tuple[int, int]) -> bool:
@@ -733,8 +803,20 @@ class Game:
             and hex_distance(self.player, tile) <= 2
             and self.buildings.get_building(tile) is None
             and self.campfire_at(tile) is None
+            and self.treasure_chest_at(tile) is None
+            and self.unopened_treasure_chest_at(tile) is None
         )
 
+    def unopened_treasure_chest_at(
+        self,
+        tile: tuple[int, int],
+    ) -> TreasureChest | None:
+        chest = self.treasure_chest_at(tile)
+
+        if chest is None or chest.opened:
+            return None
+
+        return chest
 
     def build_campfire_at(self, tile: tuple[int, int]) -> bool:
         if not self.can_build_campfire_at(tile):
@@ -1320,7 +1402,18 @@ class Game:
                         and (not campfire.lit or campfire.fuel < CAMPFIRE_MAX_FUEL),
                     )
                 )
+            chest = self.treasure_chest_at(tile)
 
+            if chest is not None:
+                chest_label = "寶箱已開啟" if chest.opened else "打開寶箱"
+
+                actions.append(
+                    (
+                        "treasure",
+                        chest_label,
+                        self.can_open_treasure_chest(chest),
+                    )
+                )
             return actions
         if self.phase == "night":
             enemies = self.enemies_at(tile)
@@ -1360,7 +1453,18 @@ class Game:
                         and not self.attack_animating,
                     )
                 )
+            chest = self.treasure_chest_at(tile)
 
+            if chest is not None:
+                chest_label = "寶箱已開啟" if chest.opened else "打開寶箱"
+
+                actions.append(
+                    (
+                        "treasure",
+                        chest_label,
+                        self.can_open_treasure_chest(chest),
+                    )
+                )
             actions.append(
                 (
                     "wait",
@@ -1395,6 +1499,13 @@ class Game:
                 self.add_firewood_day(campfire)
             else:
                 self.add_firewood_night(campfire)
+        elif action == "treasure":
+            chest = self.treasure_chest_at(tile)
+
+            if chest is None:
+                return
+
+            self.open_treasure_chest(chest)
         elif action == "wait":
             self.pass_night_turn()
 
