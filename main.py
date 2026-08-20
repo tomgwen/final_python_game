@@ -1975,6 +1975,78 @@ def draw_boar(surface, center, hp, max_hp) -> None:
 # =========================================================
 # HUD
 # =========================================================
+def draw_enemy_icon(
+    surface,
+    center,
+    enemy_type: str,
+    hp: int,
+    max_hp: int,
+) -> None:
+    x, y = center
+
+    icon_sizes = {
+        "wolf": (44, 44),
+        "boar": (48, 48),
+        "hyena": (44, 44),
+        "bear": (52, 52),
+        "sabertooth": (48, 48),
+    }
+
+    icon_size = icon_sizes.get(
+        enemy_type,
+        (44, 44),
+    )
+    print("DRAW ENEMY:", enemy_type)
+    icon_surface = icon_manager.get_icon(
+        "creatures",
+        enemy_type,
+        icon_size,
+    )
+
+    icon_rect = icon_surface.get_rect(
+        center=(x, y - 5),
+    )
+
+    surface.blit(
+        icon_surface,
+        icon_rect,
+    )
+
+    ratio = (
+        0
+        if max_hp <= 0
+        else max(
+            0,
+            min(1, hp / max_hp),
+        )
+    )
+
+    bar_width = 38
+    bar_height = 5
+    bar_x = x - bar_width // 2
+    bar_y = y + 22
+
+    pygame.draw.rect(
+        surface,
+        (48, 48, 48),
+        pygame.Rect(
+            bar_x,
+            bar_y,
+            bar_width,
+            bar_height,
+        ),
+    )
+
+    pygame.draw.rect(
+        surface,
+        RED,
+        pygame.Rect(
+            bar_x,
+            bar_y,
+            int(bar_width * ratio),
+            bar_height,
+        ),
+    )
 def draw_bar(surface, fonts, x, y, width, label, value, maximum, color) -> None:
     text(surface, fonts["small"], f"{label}  {value}/{maximum}", x, y)
     background = pygame.Rect(x, y + 22, width, 12)
@@ -2408,12 +2480,13 @@ def draw_game(
             center = (base_x + offset_x, base_y - 3)
             max_hp = get_enemy_max_health(enemy.enemy_type)
             
-            if enemy.enemy_type == ENEMY_WOLF:
-                draw_wolf(screen, center, enemy.health, max_hp)
-            elif enemy.enemy_type == ENEMY_BOAR:
-                draw_boar(screen, center, enemy.health, max_hp)
-            else:
-                draw_boar(screen, center, enemy.health, max_hp)
+            draw_enemy_icon(
+                screen,
+                center,
+                enemy.enemy_type,
+                enemy.health,
+                max_hp,
+            )
                 
         if len(enemies) > 3:
             text(screen, fonts["tiny"], f"+{len(enemies) - 3}", base_x + 19, base_y - 27, RED)
