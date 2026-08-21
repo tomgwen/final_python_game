@@ -859,6 +859,11 @@ class Game:
     # =====================================================
     # 生存 / 製作
     # =====================================================
+    def spend_craft_turn(self) -> None:
+        if self.phase == "day":
+            self.spend_day_turn()
+        elif self.phase == "night":
+            self.advance_night_turn()
     def eat(self) -> bool:
         if self.phase != "day":
             return False
@@ -898,7 +903,7 @@ class Game:
         return True
 
     def craft_spear(self) -> bool:
-        if self.phase != "day":
+        if self.phase not in ("day", "night"):
             return False
         if self.has_spear:
             self.log("你已經擁有石矛。")
@@ -908,11 +913,11 @@ class Game:
             return False
         self.set_tool_owned("spear", True)
         self.log("製作石矛成功！攻擊力提升。")
-        self.spend_day_turn()
+        self.spend_craft_turn()
         return True
 
     def craft_axe(self) -> bool:
-        if self.phase != "day":
+        if self.phase not in ("day", "night"):
             return False
         if self.has_axe:
             self.log("你已經擁有石斧。")
@@ -922,11 +927,11 @@ class Game:
             return False
         self.set_tool_owned("axe", True)
         self.log("製作石斧成功！採木效率提升。")
-        self.spend_day_turn()
+        self.spend_craft_turn()
         return True
 
     def craft_pickaxe(self) -> bool:
-        if self.phase != "day":
+        if self.phase not in ("day", "night"):
             return False
         if self.has_pickaxe:
             self.log("你已經擁有石鎬。")
@@ -936,10 +941,10 @@ class Game:
             return False
         self.set_tool_owned("pickaxe", True)
         self.log("製作石鎬成功！採石效率提升。")
-        self.spend_day_turn()
+        self.spend_craft_turn()
         return True
     def craft_bow(self) -> bool:
-        if self.phase != "day":
+        if self.phase not in ("day", "night"):
             return False
 
         if self.has_bow:
@@ -952,10 +957,10 @@ class Game:
 
         self.set_tool_owned("bow", True)
         self.log("製作弓成功！可以使用箭矢進行遠程攻擊。")
-        self.spend_day_turn()
+        self.spend_craft_turn()
         return True
     def craft_arrows(self) -> bool:
-        if self.phase != "day":
+        if self.phase not in ("day", "night"):
             return False
 
         if not self.inventory.spend({"wood": 1, "stone": 1}):
@@ -964,17 +969,17 @@ class Game:
 
         self.inventory.add(RESOURCE_ARROW, 5)
         self.log("製作箭矢成功！獲得 5 支箭。")
-        self.spend_day_turn()
+        self.spend_craft_turn()
         return True
     def craft_armor(self) -> bool:
-        if self.phase != "day":
+        if self.phase not in ("day", "night"):
             return False
         if not self.inventory.spend({"hide": 2, "stone": 1}):
             self.log("獸皮護甲需要 2 獸皮 + 1 石頭。")
             return False
         self.survival.add_armor(25)
         self.log("製作獸皮護甲成功！護甲 +25。")
-        self.spend_day_turn()
+        self.spend_craft_turn()
         return True
 
     # =====================================================
@@ -1345,12 +1350,7 @@ class Game:
             self.log("夜晚 20 回合結束，剩餘敵人撤退。")
             self.finish_night()
     def enemy_target(self, enemy) -> tuple[int, int]:
-        player_detection_radius = 5
-
-        if hex_distance(enemy.position, self.player) <= player_detection_radius:
-            return self.player
-
-        return CAMP_POSITION
+        return self.player
     def enemy_phase(self) -> None:
         for enemy in list(self.alive_enemies()):
             if not enemy.alive:
@@ -2010,10 +2010,19 @@ def hud_buttons(game: Game):
         columns = 2
     elif game.phase == "night":
         entries = [
-            ("wait", "結束這回合", not game.attack_animating),
+            (
+                "craft_menu",
+                "製作",
+                not game.attack_animating,
+            ),
+            (
+                "wait",
+                "結束這回合",
+                not game.attack_animating,
+            ),
         ]
         y = hud.y + 440
-        columns = 1
+        columns = 2
     else:
         entries = [("restart", "重新開始", True)]
         y = hud.y + 430

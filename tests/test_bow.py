@@ -97,19 +97,49 @@ def test_cannot_craft_arrows_without_materials():
     assert game.inventory.get(RESOURCE_ARROW) == 0
 
 
-def test_bow_cannot_be_crafted_at_night():
+def test_bow_can_be_crafted_at_night():
     game = Game()
     game.phase = "night"
+    game.night_turns_left = 20
+
+    game.enemies = [
+        create_enemy(
+            ENEMY_WOLF,
+            game.player,
+        )
+    ]
+
     game.inventory.add("hide", 1)
 
-    assert game.craft_bow() is False
+    assert game.craft_bow() is True
+    assert game.has_bow is True
+    assert game.night_turns_left == 19
 
 
-def test_arrows_cannot_be_crafted_at_night():
+def test_arrows_can_be_crafted_at_night():
     game = Game()
     game.phase = "night"
+    game.night_turns_left = 20
 
-    assert game.craft_arrows() is False
+    game.enemies = [
+        create_enemy(
+            ENEMY_WOLF,
+            game.player,
+        )
+    ]
+
+    arrows_before = game.inventory.get(
+        RESOURCE_ARROW
+    )
+
+    assert game.craft_arrows() is True
+
+    assert (
+        game.inventory.get(RESOURCE_ARROW)
+        == arrows_before + 5
+    )
+
+    assert game.night_turns_left == 19
 from constants import ENEMY_WOLF
 from enemy import create_enemy
 from main import hex_distance

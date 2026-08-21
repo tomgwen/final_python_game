@@ -22,7 +22,7 @@ def test_enemy_targets_player_when_player_is_near():
     assert game.enemy_target(enemy) == game.player
 
 
-def test_enemy_targets_camp_when_player_is_far():
+def test_enemy_targets_player_when_player_is_far():
     game = Game()
     make_all_land(game)
 
@@ -33,7 +33,7 @@ def test_enemy_targets_camp_when_player_is_far():
         (10, 4),
     )
 
-    assert game.enemy_target(enemy) == CAMP_POSITION
+    assert game.enemy_target(enemy) == game.player
 
 
 def test_enemy_step_reduces_distance_to_nearby_player():
@@ -65,7 +65,7 @@ def test_enemy_step_reduces_distance_to_nearby_player():
 
     assert after_distance < before_distance
 
-def test_enemy_target_switches_based_on_player_distance():
+def test_enemy_always_targets_player():
     game = Game()
     make_all_land(game)
 
@@ -78,4 +78,4 @@ def test_enemy_target_switches_based_on_player_distance():
     assert game.enemy_target(enemy) == game.player
 
     game.player = (18, 12)
-    assert game.enemy_target(enemy) == CAMP_POSITION
+    assert game.enemy_target(enemy) == game.player
